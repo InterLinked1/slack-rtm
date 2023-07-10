@@ -17,6 +17,10 @@
  * \author Naveen Albert <bbs@phreaknet.org>
  */
 
+#define SLACK_RTM_LIB_VERSION_MAJOR 0
+#define SLACK_RTM_LIB_VERSION_MINOR 2
+#define SLACK_RTM_LIB_VERSION_PATCH 0
+
 #define SLACK_LOG_NONE 0
 #define SLACK_LOG_FATAL 1
 #define SLACK_LOG_ERROR 2

@@ -52,6 +52,18 @@ struct slack_reply {
 	int replyto;
 };
 
+struct slack_connect {
+	/* Query parameters */
+	const char *wsurl;			/*!< Entire WebSocket connection URL */
+	const char *token;			/*!< Slack token */
+	const char *gwserver;		/*!< Gateway server */
+	const char *enterpriseid;	/*!< Enterprise ID (or NULL, for non-enterprise) */
+	/* Header parameters */
+	const char *cookies;		/*!< Entire cookie header */
+	const char *cookie_d;		/*!< 'd' cookie (required for xoxc tokens) */
+	const char *cookie_ds;		/*!< 'd_s' cookie (may also be required, in addition to d) */
+};
+
 struct slack_client {
 	int msgid;				/*!< Current message ID for this connection */
 	int fd;					/*!< Socket file descriptor */
@@ -64,6 +76,7 @@ struct slack_client {
 	int listeners;			/*!< Number of threads waiting for replies */
 	pthread_mutex_t rdlock;	/*!< Mutex for reading */
 	pthread_mutex_t wrlock;	/*!< Mutex for writing */
+	struct slack_connect conn;
 };
 
 static char root_certs[84] = "/etc/ssl/certs/ca-certificates.crt";
@@ -399,25 +412,45 @@ sslcleanup:
 #define SSL_SEND(slack, data) SSL_write(slack->ssl, data, STRLEN(data))
 
 #define SLACK_WS_HOSTNAME "wss-primary.slack.com"
+#define START_ARGS "%3Fagent%3Dclient%26org_wide_aware%3Dtrue%26agent_version%3D1688756872%26eac_cache_ts%3Dtrue%26cache_ts%3D0%26name_tagging%3Dtrue%26only_self_subteams%3Dtrue%26connect_only%3Dtrue%26ms_latest%3Dtrue"
 
-static int websocket_handshake(struct slack_client *slack, const char *gwserver, const char *token, const char *cookie)
+static int websocket_handshake(struct slack_client *slack, struct slack_connect *conn)
 {
 	char buf[4096];
+	char urlbuf[1024];
+	const char *url = conn->wsurl;
 	int res;
 	size_t bytes_read = 0;
 
 	/* Poor man's HTTP request. It gets the job done.
 	 * After the upgrade is complete, the WebSocket library handles all the data on the wire. */
 
-	res = snprintf(buf, sizeof(buf), "GET /?token=%s&sync_desync=1&slack_client=desktop&start_args=%s&no_query_on_subscribe=1&flannel=3&lazy_channels=1&gateway_server=%s&batch_presence_aware=1 HTTP/1.1\r\n", token, "%3Fagent%3Dclient%26org_wide_aware%3Dtrue%26agent_version%3D1688756872%26eac_cache_ts%3Dtrue%26cache_ts%3D0%26name_tagging%3Dtrue%26only_self_subteams%3Dtrue%26connect_only%3Dtrue%26ms_latest%3Dtrue", gwserver);
+	if (conn->wsurl) {
+		/* Some minor sanity checks */
+		if (conn->wsurl[0] != '/') {
+			slack_error("Invalid Slack WebSocket URL (must begin with '/')\n");
+			return -1;
+		}
+	} else {
+		snprintf(urlbuf, sizeof(urlbuf), "/?token=%s&sync_desync=1&slack_client=desktop&start_args=%s&no_query_on_subscribe=1&flannel=3&lazy_channels=1&gateway_server=%s&enterprise_id=%s&batch_presence_aware=1", conn->token, START_ARGS, conn->gwserver, conn->enterpriseid ? conn->enterpriseid : "");
+		url = urlbuf;
+	}
+	res = snprintf(buf, sizeof(buf), "GET %s HTTP/1.1\r\n", url);
 	__ssl_write(slack, buf, res);
 
 	SSL_SEND(slack, "Host: " SLACK_WS_HOSTNAME "\r\n");
 	SSL_SEND(slack, "Pragma: no-cache\r\n");
 	SSL_SEND(slack, "Cache-Control: no-cache\r\n");
 
-	if (cookie) {
-		res = snprintf(buf, sizeof(buf), "Cookie: d=%s\r\n", cookie);
+	if (conn->cookies) {
+		res = snprintf(buf, sizeof(buf), "Cookie: %s\r\n", conn->cookies);
+		__ssl_write(slack, buf, res);
+	} else if (conn->cookie_d) {
+		if (conn->cookie_ds) {
+			res = snprintf(buf, sizeof(buf), "Cookie: d=%s; d-s=%s\r\n", conn->cookie_d, conn->cookie_ds);
+		} else {
+			res = snprintf(buf, sizeof(buf), "Cookie: d=%s\r\n", conn->cookie_d);
+		}
 		__ssl_write(slack, buf, res);
 	}
 
@@ -459,10 +492,65 @@ static int websocket_handshake(struct slack_client *slack, const char *gwserver,
 	return 0;
 }
 
-int slack_client_connect(struct slack_client *slack, const char *gwserver, const char *token, const char *cookie)
+void slack_client_set_connect_url(struct slack_client *slack, const char *url)
 {
-	if (!cookie && !strncmp(token, "xoxc", 4)) {
-		slack_error("Cookie required for xoxc tokens\n");
+	struct slack_connect *conn = &slack->conn;
+	conn->wsurl = url;
+}
+
+void slack_client_set_token(struct slack_client *slack, const char *token)
+{
+	struct slack_connect *conn = &slack->conn;
+	conn->token = token;
+}
+
+void slack_client_set_gateway_server(struct slack_client *slack, const char *gwserver)
+{
+	struct slack_connect *conn = &slack->conn;
+	conn->gwserver = gwserver;
+}
+
+void slack_client_set_enterprise_id(struct slack_client *slack, const char *entid)
+{
+	struct slack_connect *conn = &slack->conn;
+	conn->enterpriseid = entid;
+}
+
+void slack_client_set_cookies(struct slack_client *slack, const char *cookies)
+{
+	struct slack_connect *conn = &slack->conn;
+	conn->cookies = cookies;
+}
+
+void slack_client_set_cookie(struct slack_client *slack, const char *name, const char *value)
+{
+	struct slack_connect *conn = &slack->conn;
+	if (!strcmp(name, "d")) {
+		conn->cookie_d = value;
+	} else if (!strcmp(name, "d-s")) {
+		conn->cookie_ds = value;
+	} else {
+		slack_debug(1, "Ignoring unneeded cookie '%s'\n", name);
+	}
+}
+
+int slack_client_connect_possible(struct slack_client *slack)
+{
+	struct slack_connect *conn = &slack->conn;
+	if (!conn->token) {
+		slack_debug(1, "Missing token\n");
+		return 0;
+	}
+	if (!conn->cookie_d && !strncmp(conn->token, "xoxc", 4)) {
+		slack_debug(1, "Cookie required for xoxc tokens\n");
+		return 0;
+	}
+	return 1;
+}
+
+int slack_client_connect(struct slack_client *slack)
+{
+	if (!slack_client_connect_possible(slack)) {
 		return -1;
 	}
 	/* Establish the TCP connection */
@@ -476,7 +564,7 @@ int slack_client_connect(struct slack_client *slack, const char *gwserver, const
 		return -1;
 	}
 	/* Make an HTTP request and perform the WebSocket upgrade */
-	if (websocket_handshake(slack, gwserver, token, cookie)) {
+	if (websocket_handshake(slack, &slack->conn)) {
 		return -1;
 	}
 	return 0;

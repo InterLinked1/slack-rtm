@@ -31,6 +31,57 @@ struct slack_client *slack_client_new(void *userdata);
 void slack_client_destroy(struct slack_client *slack);
 
 /*!
+ * \brief Set the entire connection request URI (without hostname) for the WebSocket connection.
+ *        This will include the token, gateway server, enterprise ID, etc. in the URI.
+ * \param[in] url Entire request URI. This reference must remain valid until slack_client_connect is called.
+ * \note You should use slack_client_set_token, slack_client_set_gateway_server, and slack_client_set_enterprise_id
+ *       separately instead if possible. This is a lower-level function that should only be used as a last resort.
+ */
+void slack_client_set_connect_url(struct slack_client *slack, const char *url);
+
+/*!
+ * \brief Set the Slack token for connection (for web tokens, begins with xoxc-)
+ * \param[in] token Slack token. This reference must remain valid until slack_client_connect is called.
+ */
+void slack_client_set_token(struct slack_client *slack, const char *token);
+
+/*!
+ * \brief Set the gateway server for connection
+ * \param[in] gwserver Gateway server ID. This reference must remain valid until slack_client_connect is called.
+ */
+void slack_client_set_gateway_server(struct slack_client *slack, const char *gwserver);
+
+/*!
+ * \brief Set the enterprise ID of the client
+ * \param[in] entid Enterprise ID. This reference must remain valid until slack_client_connect is called.
+ * \note If you are not connecting to an enterprise workspace, you do not need to call this function.
+ */
+void slack_client_set_enterprise_id(struct slack_client *slack, const char *entid);
+
+/*!
+ * \brief Set the cookies header for the connection
+ * \param[in] The raw value of the Cookie header to send. This reference must remain valid until slack_client_connect is called.
+ * \note If possible, use slack_client_set_cookie instead; only use this as a last resort.
+ */
+void slack_client_set_cookies(struct slack_client *slack, const char *cookies);
+
+/*!
+ * \brief Set a required cookie for the connection
+ * \param[in] name Cookie name. The 'd' cookie is required and 'd-s' may also be required (e.g. for enterprises)
+ *                 Other cookies are ignored by this function.
+ * \param[in] value Cookie value. This reference must remain valid until slack_client_connect is called.
+ */
+void slack_client_set_cookie(struct slack_client *slack, const char *name, const char *value);
+
+/*!
+ * \brief Check if it is possible to connect to the Slack RTM API
+ * \param[in[ slack
+ * \retval 1 Sufficient parameters to connect to Slack API
+ * \retval 0 Some or all connection information is missing or invalid (use the slack_client_set_ functions to remedy this)
+ */
+int slack_client_connect_possible(struct slack_client *slack);
+
+/*!
  * \brief Establish a Slack RTM client connection
  * \param slack
  * \param gwserver Gateway server ID
@@ -38,7 +89,7 @@ void slack_client_destroy(struct slack_client *slack);
  * \param cookie The 'd' cookie (begins with xoxd). This is required for xoxc tokens. Otherwise, set to NULL.
  * \retval 0 on success, -1 on failure
  */
-int slack_client_connect(struct slack_client *slack, const char *gwserver, const char *token, const char *cookie);
+int slack_client_connect(struct slack_client *slack);
 
 /*!
  * \brief Run the event loop for a Slack client

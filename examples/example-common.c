@@ -25,6 +25,7 @@
  * \author Naveen Albert <bbs@phreaknet.org>
  */
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
 #include <getopt.h>
@@ -60,8 +61,19 @@ static void option_help(void)
 	fprintf(stderr, "-c [cookie]    - Contents of d cookie (URL encoded)\n");
 	fprintf(stderr, "-d             - Increase debug level\n");
 	fprintf(stderr, "-h             - Show usage\n");
+	fprintf(stderr, "-r             - Relay channel\n");
 	fprintf(stderr, "-s [gwserver]  - Gateway server ID\n");
 	fprintf(stderr, "-t [token]     - User token\n");
+	fprintf(stderr, "\n");
+	fprintf(stderr, "Some options can also or only be set using environment variables:\n");
+	fprintf(stderr, "SLACK_TOKEN        - User token\n");
+	fprintf(stderr, "SLACK_GWSERVER     - Gateway server ID\n");
+	fprintf(stderr, "SLACK_ENTERPRISE   - Enterprise ID\n");
+	fprintf(stderr, "SLACK_WS_URL       - Raw WebSocket request URI to send\n");
+	fprintf(stderr, "SLACK_COOKIE_D     - Contents of d cookie (URL encoded)\n");
+	fprintf(stderr, "SLACK_COOKIE_D_S   - Contents of d-s cookie\n");
+	fprintf(stderr, "SLACK_COOKIE_M     - Contents of m cookie\n");
+	fprintf(stderr, "SLACK_COOKIES      - Raw cookie header value to send\n");
 }
 
 int parse_option(int argc, char *argv[], int c)
@@ -100,17 +112,7 @@ static int parse_options(int argc, char *argv[])
 		}
 	}
 
-	if (!gwserver) {
-		fprintf(stderr, "Missing gateway server (-h for usage)\n");
-	} else if (!token) {
-		fprintf(stderr, "Missing token (-h for usage)\n");
-	} else if (!cookie && !strncmp(token, "xoxc", 4)) { /* A cookie is required for these tokens */
-		fprintf(stderr, "Missing cookie (-h for usage)\n");
-	} else {
-		return 0;
-	}
-
-	return -1;
+	return 0;
 }
 
 static struct slack_client *active = NULL;
@@ -131,6 +133,28 @@ int slack_example_run(int argc, char *argv[], struct slack_callbacks *cb)
 		return -1;
 	}
 
+	/* Check environment variables */
+	if (!token) {
+		token = getenv("SLACK_TOKEN");
+	}
+	if (!gwserver) {
+		gwserver = getenv("SLACK_GWSERVER");
+	}
+	if (!cookie) {
+		cookie = getenv("SLACK_COOKIE_D");
+	}
+
+	if (!gwserver) {
+		fprintf(stderr, "Missing gateway server (-h for usage)\n");
+		return -1;
+	} else if (!token) {
+		fprintf(stderr, "Missing token (-h for usage)\n");
+		return -1;
+	} else if (!cookie && !strncmp(token, "xoxc", 4)) { /* A cookie is required for these tokens */
+		fprintf(stderr, "Missing cookie (-h for usage)\n");
+		return -1;
+	}
+
 	/* Initialize the library */
 	slack_set_logger(slack_log);
 	slack_set_log_level(SLACK_LOG_DEBUG + debug_level);
@@ -138,10 +162,34 @@ int slack_example_run(int argc, char *argv[], struct slack_callbacks *cb)
 	/* Create a Slack client using the high-level APIs */
 	slack = slack_client_new(NULL);
 	if (!slack) {
+		fprintf(stderr, "Failed to create Slack client\n");
 		goto cleanup;
 	}
+
+	/* If these are NULL, it doesn't hurt anything */
+	slack_client_set_enterprise_id(slack, getenv("SLACK_ENTERPRISE"));
+	slack_client_set_connect_url(slack, getenv("SLACK_WS_URL"));
+	slack_client_set_cookies(slack, getenv("SLACK_COOKIES"));
+	slack_client_set_cookie(slack, "d-s", getenv("SLACK_COOKIE_D_S"));
+
+	if (token) {
+		slack_client_set_token(slack, token);
+	}
+	if (gwserver) {
+		slack_client_set_gateway_server(slack, gwserver);
+	}
+	if (cookie) {
+		slack_client_set_cookie(slack, "d", cookie);
+	}
+
+	if (!slack_client_connect_possible(slack)) {
+		fprintf(stderr, "Some required arguments are missing: either use environmental variables or command line arguments\n");
+		goto cleanup;
+	}
+
 	/* Connect to Slack */
-	if (slack_client_connect(slack, gwserver, token, cookie)) {
+	if (slack_client_connect(slack)) {
+		fprintf(stderr, "Slack client connection failed\n");
 		goto cleanup;
 	}
 

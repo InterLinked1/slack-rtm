@@ -44,7 +44,15 @@ To get the information you'll need to authenticate using this library, you'll ne
 
 - Extract your token, beginning with (and including) `xoxc-` from `MYTOKEN` and extract your gateway server from `GWSERVER`
 
-It should go without saying, but **you must keep this information safe**! Your token and cookie will give anyone with access to them unfettered access to your Slack workspace *as you*. Treat these just like you would your username and password.
+**Enterprise Workspaces**
+
+If you are connecting to an enterprise workspace, there are a couple extra things you'll need:
+
+- From the WebSocket connection URL, you'll need the Enterprise ID (`enterprise_id` query parameter)
+
+- You'll probably also need to provide the `d-s` cookie, not just the `d` cookie
+
+It should go without saying, but **you must keep this information safe**! Your token and cookie(s) will give anyone with access to them unfettered access to your Slack workspace *as you*. Treat these just like you would your username and password.
 
 ## Library Overview
 
@@ -85,6 +93,8 @@ This repository comes with some example programs that demonstrate library usage 
 - `-s [gwserver]` - Gateway server ID
 
 - `-t [token]` - Your token
+
+These settings can also be set using environment variables, if that is more convenient for you.
 
 Some example programs may require additional arguments; consult the program help for full usage.
 
