@@ -596,10 +596,7 @@ static int slack_read(struct slack_client *slack, struct slack_callbacks *cb)
 		slack_debug(8, "WebSocket '%s' frame received\n", wss_frame_name(frame));
 		switch (wss_frame_opcode(frame)) {
 			case WS_OPCODE_TEXT:
-				if (slack_parse_message(cb, slack, slack->userdata, wss_frame_payload(frame), wss_frame_payload_length(frame))) {
-					wss_frame_destroy(frame);
-					return -1;
-				}
+				slack_parse_message(cb, slack, slack->userdata, wss_frame_payload(frame), wss_frame_payload_length(frame));
 				break;
 			case WS_OPCODE_BINARY:
 				/* Do something... */

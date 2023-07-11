@@ -98,6 +98,9 @@ These settings can also be set using environment variables, if that is more conv
 
 Some example programs may require additional arguments; consult the program help for full usage.
 
+**WARNING:** Some of the example programs may be highly disruptive to busy workspaces. The example programs are meant to merely demonstrate usage and are not production-ready.
+Any testing should be done in a sandbox workspace. Otherwise, you may attract the wrath of your coworkers.
+
 This library itself is licensed under the GNU Lesser General Public License, but the example program code is all licensed under the Apache license, so feel free to use that as a starting point in your own programs.
 
 ## Contributions, Issues, Bugs, etc.

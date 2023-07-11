@@ -42,8 +42,9 @@ struct slack_client;
 
 /*! \brief User callbacks for received events */
 struct slack_callbacks {
-	int (*reply)(struct slack_client *client, void *userdata, const char *data, size_t len);	/*! \note This callback is automatically set up by the high level API */
-	int (*user_typing)(struct slack_client *client, void *userdata, const char *channel, int id, const char *user);
+	int (*reply)(struct slack_client *slack, void *userdata, const char *data, size_t len);	/*! \note This callback is automatically set up by the high level API */
+	int (*message)(struct slack_client *slack, void *userdata, const char *channel, const char *user, const char *text, const char *raw);
+	int (*user_typing)(struct slack_client *slack, void *userdata, const char *channel, int id, const char *user);
 };
 
 /*! \note

@@ -187,7 +187,12 @@ int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, 
 	} else if (!strcmp(type, "member_left_channel")) {
 		
 	} else if (!strcmp(type, "message")) {
-		
+		if (cb->message) {
+			const char *channel = json_string_value(json_object_get(json, "channel"));
+			const char *user = json_string_value(json_object_get(json, "user"));
+			const char *text = json_string_value(json_object_get(json, "text"));
+			res = cb->message(slack, userdata, channel, user, text, buf);
+		}
 	} else if (!strcmp(type, "pin_added")) {
 		
 	} else if (!strcmp(type, "pin_removed")) {
@@ -258,6 +263,8 @@ int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, 
 	/* These are all officially undocumented events: */
 	} else if (!strcmp(type, "draft_create")) {
 	} else if (!strcmp(type, "draft_delete")) {
+	} else if (!strcmp(type, "dnd_invalidated")) {
+	} else if (!strcmp(type, "user_invalidated")) {
 	} else {
 		slack_warning("Unhandled event type: %s\n", type);
 		slack_debug(1, "Event %s not currently handled: %s\n", type, buf);
