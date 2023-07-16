@@ -27,7 +27,7 @@
  * \retval -1 if the event was not parsed successfully
  * \return Return value from user callback function
  */
-int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, void *userdata, char *buf, size_t len);
+int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, size_t len);
 
 /*!
  * \brief Construct a ping message

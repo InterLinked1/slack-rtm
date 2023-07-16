@@ -36,10 +36,11 @@
 
 static const char *relaychan = NULL;
 
-static int user_typing(struct slack_client *slack, void *userdata, const char *channel, int id, const char *user)
+static int user_typing(struct slack_event *event, const char *channel, int id, const char *user)
 {
 	char msg[256];
-	(void) userdata;
+	struct slack_client *slack = slack_event_get_userdata(event);
+
 	fprintf(stderr, "=== Someone is typing! %d: %s/%s\n", id, channel, user);
 
 	/* Translates @channel and @user, and #channel link, appropriately */

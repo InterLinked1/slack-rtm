@@ -40,6 +40,8 @@
 
 #include <wss.h> /* libwss */
 
+#define SLACK_EXPOSE_JSON
+
 #include "slack.h"
 #include "slack-log.h"
 #include "slack-client.h"
@@ -77,9 +79,18 @@ struct slack_client {
 	pthread_mutex_t rdlock;	/*!< Mutex for reading */
 	pthread_mutex_t wrlock;	/*!< Mutex for writing */
 	struct slack_connect conn;
+	/* Current parsed message */
+	const char *raw;		/*!< Raw message */
+	json_t *json;			/*!< Parsed JSON */
 };
 
-static char root_certs[84] = "/etc/ssl/certs/ca-certificates.crt";
+static char root_certs_default[84] = "/etc/ssl/certs/ca-certificates.crt";
+static const char *root_certs = root_certs_default;
+
+void slack_set_tls_root_certs(const char *rootcerts)
+{
+	root_certs = rootcerts;
+}
 
 /*! \note Adapted from ssl_strerror, LBBS (GPLv2), but relicensed here under LGPL */
 static const char *ssl_strerror(int err)
@@ -186,6 +197,11 @@ struct slack_client *slack_client_new(void *userdata)
 	pthread_mutex_init(&slack->rdlock, NULL);
 	pthread_mutex_init(&slack->wrlock, NULL);
 	return slack;
+}
+
+void *slack_client_get_userdata(struct slack_client *client)
+{
+	return client->userdata;
 }
 
 static void slack_reply_free(struct slack_reply *reply)
@@ -596,7 +612,7 @@ static int slack_read(struct slack_client *slack, struct slack_callbacks *cb)
 		slack_debug(8, "WebSocket '%s' frame received\n", wss_frame_name(frame));
 		switch (wss_frame_opcode(frame)) {
 			case WS_OPCODE_TEXT:
-				slack_parse_message(cb, slack, slack->userdata, wss_frame_payload(frame), wss_frame_payload_length(frame));
+				slack_parse_message(cb, slack, wss_frame_payload(frame), wss_frame_payload_length(frame));
 				break;
 			case WS_OPCODE_BINARY:
 				/* Do something... */
@@ -754,29 +770,26 @@ void slack_client_interrupt(struct slack_client *slack)
 
 #define WAIT_FOR_REPLIES
 
-static int on_reply(struct slack_client *slack, void *userdata, const char *data, size_t len)
+static int on_reply(struct slack_event *event)
 {
 #ifdef WAIT_FOR_REPLIES
 	struct slack_reply *reply;
 	json_t *json;
-	json_error_t error;
 	char c;
 	int res;
-
-	(void) userdata;
-	(void) len;
+	struct slack_client *slack = slack_event_get_userdata(event);
 
 	/* Once the callback returns, data will no longer be a valid reference,
-	 * so might as well just parse it to JSON now */
-	json = json_loads(data, 0, &error);
+	 * so might as well just parse (or reparse) it to JSON now */
+	json = json_deep_copy(slack_event_get_json(event));
 	if (!json) {
-		slack_error("Failed to load JSON string: %s\n", error.text);
+		slack_error("Failed to duplicate JSON string: %s\n", slack_event_get_raw(event));
 		return -1;
 	}
 
 	reply = calloc(1, sizeof(*reply));
 	if (!reply) {
-		slack_fatal("Failed to receive reply\n"); /* This is bad,if we never received a reply we might be blocked waiting on */
+		slack_fatal("Failed to receive reply\n"); /* This is bad, if we never received a reply we might be blocked waiting on */
 		json_decref(json);
 		return -1;
 	}

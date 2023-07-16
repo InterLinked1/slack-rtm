@@ -18,7 +18,7 @@
  */
 
 #define SLACK_RTM_LIB_VERSION_MAJOR 0
-#define SLACK_RTM_LIB_VERSION_MINOR 2
+#define SLACK_RTM_LIB_VERSION_MINOR 3
 #define SLACK_RTM_LIB_VERSION_PATCH 0
 
 #define SLACK_LOG_NONE 0
@@ -37,14 +37,39 @@ void slack_set_logger(void (*logger)(int level, int bytes, const char *file, con
  */
 void slack_set_log_level(int level);
 
-/* Only used by the high-level API */
-struct slack_client;
+/* Opaque event */
+struct slack_event;
+
+/*! \brief Get the user data associated with a Slack client */
+void *slack_event_get_userdata(struct slack_event *event);
+
+#ifdef SLACK_EXPOSE_JSON
+/*!
+ * \brief Get the parsed JSON object for an event
+ * \note The returned object is only valid until the callback returns
+ * \note You must define SLACK_EXPOSE_JSON (and include <jansson.h> in your source file before including slack.h to use this function
+ */
+const json_t *slack_event_get_json(struct slack_event *event);
+#endif
+
+/*! \brief Get the raw message of an event */
+const char *slack_event_get_raw(struct slack_event *event);
+
+/*! \brief Get the length of the raw message of an event */
+size_t slack_event_get_rawlen(struct slack_event *event);
 
 /*! \brief User callbacks for received events */
 struct slack_callbacks {
-	int (*reply)(struct slack_client *slack, void *userdata, const char *data, size_t len);	/*! \note This callback is automatically set up by the high level API */
-	int (*message)(struct slack_client *slack, void *userdata, const char *channel, const char *user, const char *text, const char *raw);
-	int (*user_typing)(struct slack_client *slack, void *userdata, const char *channel, int id, const char *user);
+	/* Command reply callback */
+	int (*reply)(struct slack_event *event);	/*! \note This callback is automatically set up by the high level API */
+	/* Callback for all events. This callback, if provided, will be triggered for all events,
+	 * regardless if they are handled by other callbacks or not.
+	 * If this returns 0, event-specific callbacks will not be invoked.
+	 */
+	int (*all)(struct slack_event *event);
+	/* Event callbacks */
+	int (*message)(struct slack_event *event, const char *channel, const char *user, const char *text);
+	int (*user_typing)(struct slack_event *event, const char *channel, int id, const char *user);
 };
 
 /*! \note

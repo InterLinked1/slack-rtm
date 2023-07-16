@@ -21,11 +21,20 @@
 struct slack_client;
 
 /*!
+ * \brief Set root CA certificates used for TLS
+ * \param rootcerts Full path to file containing root CA certificates
+ */
+void slack_set_tls_root_certs(const char *rootcerts);
+
+/*!
  * \brief Create a Slack client
  * \param userdata Custom user data that will be provided in callback functions
  * \note Must be cleaned up using slack_session_destroy
  */
 struct slack_client *slack_client_new(void *userdata);
+
+/*! \brief Get the userdata provided in slack_client_new */
+void *slack_client_get_userdata(struct slack_client *client);
 
 /*! \brief Clean up and free a Slack client created using slack_client_new */
 void slack_client_destroy(struct slack_client *slack);

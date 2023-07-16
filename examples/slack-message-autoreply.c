@@ -34,12 +34,10 @@
 
 #include "example-common.h"
 
-static int on_message(struct slack_client *slack, void *userdata, const char *channel, const char *user, const char *text, const char *raw)
+static int on_message(struct slack_event *event, const char *channel, const char *user, const char *text)
 {
 	char msg[256];
-
-	(void) userdata;
-	(void) raw;
+	struct slack_client *slack = slack_event_get_userdata(event);
 
 	fprintf(stderr, "=== Someone posted a message! %s/%s: %s\n", channel, user, text);
 

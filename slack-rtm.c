@@ -28,18 +28,52 @@
 
 #include <jansson.h>
 
+#define SLACK_EXPOSE_JSON
+
 /* Use relative path instead of system path for the library itself */
 #include "slack.h"
 #include "slack-log.h"
 #include "slack-rtm.h"
 
-int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, void *userdata, char *buf, size_t len)
+struct slack_event {
+	void *userdata;					/*!< User data provided during slack_client_new, NULL if no user data or no client in use */
+	json_t *json;					/*!< Pointer to parsed json_t. Cast to (json_t*) to use. */
+	const char *raw;				/*!< Raw event text */
+	size_t rawlen;					/*!< Length of raw event text */
+};
+
+void *slack_event_get_userdata(struct slack_event *event)
+{
+	return event->userdata;
+}
+
+const json_t *slack_event_get_json(struct slack_event *event)
+{
+	return event->json;
+}
+
+const char *slack_event_get_raw(struct slack_event *event)
+{
+	return event->raw;
+}
+
+size_t slack_event_get_rawlen(struct slack_event *event)
+{
+	return event->rawlen;
+}
+
+int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, size_t len)
 {
 	json_t *json;
 	json_error_t error;
 	const char *type;
 	int replyto;
 	int res = 0;
+	struct slack_event e;
+
+	e.userdata = userdata;
+	e.raw = buf;
+	e.rawlen = len;
 
 	if (!cb) {
 		/* Could happen if slack_send is used before the event loop is started */
@@ -60,11 +94,13 @@ int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, 
 
 	slack_debug(6, "<== %s\n", buf);
 
+	e.json = json;
+
 	/* Replies don't have a type */
 	replyto = json_number_value(json_object_get(json, "reply_to"));
 	if (replyto) {
 		if (cb->reply) {
-			res = cb->reply(slack, userdata, buf, len);
+			res = cb->reply(&e);
 		}
 		json_decref(json);
 		return res;
@@ -191,7 +227,7 @@ int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, 
 			const char *channel = json_string_value(json_object_get(json, "channel"));
 			const char *user = json_string_value(json_object_get(json, "user"));
 			const char *text = json_string_value(json_object_get(json, "text"));
-			res = cb->message(slack, userdata, channel, user, text, buf);
+			res = cb->message(&e, channel, user, text);
 		}
 	} else if (!strcmp(type, "pin_added")) {
 		
@@ -258,7 +294,7 @@ int slack_parse_message(struct slack_callbacks *cb, struct slack_client *slack, 
 			const char *channel = json_string_value(json_object_get(json, "channel"));
 			const char *user = json_string_value(json_object_get(json, "user"));
 			int id = json_number_value(json_object_get(json, "id"));
-			res = cb->user_typing(slack, userdata, channel, id, user);
+			res = cb->user_typing(&e, channel, id, user);
 		}
 	/* These are all officially undocumented events: */
 	} else if (!strcmp(type, "draft_create")) {
