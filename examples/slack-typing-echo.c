@@ -33,7 +33,7 @@
 
 #include "example-common.h"
 
-static int user_typing(struct slack_event *event, const char *channel, int id, const char *user)
+static int user_typing(struct slack_event *event, const char *channel, const char *thread_ts, int id, const char *user)
 {
 	char msg[256];
 	struct slack_client *slack = slack_event_get_userdata(event);
@@ -41,10 +41,15 @@ static int user_typing(struct slack_event *event, const char *channel, int id, c
 	fprintf(stderr, "=== Someone is typing! %d: %s/%s\n", id, channel, user);
 
 	/* Translates @channel and @user appropriately */
-	snprintf(msg, sizeof(msg), "<!channel> Looks like <@%s> just started typing some happy thoughts...", user);
+	if (thread_ts) {
+		/* @channel doesn't work in thread replies, so don't use it. */
+		snprintf(msg, sizeof(msg), "Looks like <@%s> just started typing some happy thoughts...", user);
+	} else {
+		snprintf(msg, sizeof(msg), "<!channel> Looks like <@%s> just started typing some happy thoughts...", user);
+	}
 
 	/* Whenever somebody starts typing, post a message to the channel */
-	if (slack_channel_post_message(slack, channel, msg)) {
+	if (slack_channel_post_message(slack, channel, thread_ts, msg)) {
 		fprintf(stderr, "=== Failed to post message to channel %s\n", channel);
 	}
 

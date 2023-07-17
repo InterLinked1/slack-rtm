@@ -41,17 +41,19 @@ char *slack_construct_ping(int id);
  * \brief Construct a message to send to a channel
  * \param id Unique ID for connection
  * \param channel Channel ID (not name)
+ * \param thread_ts Parent thread ID (NULL if none)
  * \param text
  * \return JSON payload to send on WebSocket on success
  * \return NULL on failure
  */
-char *slack_channel_construct_message(int id, const char *channel, const char *text);
+char *slack_channel_construct_message(int id, const char *channel, const char *thread_ts, const char *text);
 
 /*!
  * \brief Construct a typing indicator to send to a channel
  * \param id Unique ID for connection
  * \param channel Channel ID (not name)
+ * \param thread_ts Parent thread ID (NULL if none)
  * \return JSON payload to send on WebSocket on success
  * \return NULL on failure
 */
-char *slack_channel_construct_typing(int id, const char *channel);
+char *slack_channel_construct_typing(int id, const char *channel, const char *thread_ts);

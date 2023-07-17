@@ -66,14 +66,14 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 {
 	json_t *json;
 	json_error_t error;
-	const char *type;
+	const char *type, *subtype;
 	int replyto;
 	int res = 0;
-	struct slack_event e;
+	struct slack_event event;
 
-	e.userdata = userdata;
-	e.raw = buf;
-	e.rawlen = len;
+	event.userdata = userdata;
+	event.raw = buf;
+	event.rawlen = len;
 
 	if (!cb) {
 		/* Could happen if slack_send is used before the event loop is started */
@@ -94,13 +94,13 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 
 	slack_debug(6, "<== %s\n", buf);
 
-	e.json = json;
+	event.json = json;
 
 	/* Replies don't have a type */
 	replyto = json_number_value(json_object_get(json, "reply_to"));
 	if (replyto) {
 		if (cb->reply) {
-			res = cb->reply(&e);
+			res = cb->reply(&event);
 		}
 		json_decref(json);
 		return res;
@@ -112,6 +112,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 		json_decref(json);
 		return -1;
 	}
+	subtype = json_string_value(json_object_get(json, "subtype")); /* May be NULL */
 
 	if (!strcmp(type, "error")) {
 		/* This will be fatal to the connection, but not the library */
@@ -141,7 +142,19 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "channel_left")) {
 		
 	} else if (!strcmp(type, "channel_marked")) {
-		
+		if (cb->channel_marked) {
+			struct slack_event_channel_marked e;
+			e.channel = json_string_value(json_object_get(json, "channel"));
+			e.ts = json_string_value(json_object_get(json, "ts"));
+			e.unread_count = json_number_value(json_object_get(json, "unread_count"));
+			e.unread_count_display = json_number_value(json_object_get(json, "unread_count_display"));
+			e.num_mentions = json_number_value(json_object_get(json, "num_mentions"));
+			e.num_mentions_display = json_number_value(json_object_get(json, "num_mentions_display"));
+			e.mention_count = json_number_value(json_object_get(json, "mention_count"));
+			e.mention_count_display = json_number_value(json_object_get(json, "mention_count_display"));
+			e.event_ts = json_string_value(json_object_get(json, "event_ts"));
+			res = cb->channel_marked(&event, &e);
+		}
 	} else if (!strcmp(type, "channel_rename")) {
 		
 	} else if (!strcmp(type, "channel_unarchive")) {
@@ -221,13 +234,28 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "member_joined_channel")) {
 		
 	} else if (!strcmp(type, "member_left_channel")) {
-		
+
 	} else if (!strcmp(type, "message")) {
-		if (cb->message) {
+		if (subtype) {
+			if (!strcmp(subtype, "message_replied")) {
+				/* text is NULL with this one */
+			}
+		} else if (cb->message) { /* Regular message callback */
 			const char *channel = json_string_value(json_object_get(json, "channel"));
 			const char *user = json_string_value(json_object_get(json, "user"));
 			const char *text = json_string_value(json_object_get(json, "text"));
-			res = cb->message(&e, channel, user, text);
+			const char *thread_ts = json_string_value(json_object_get(json, "thread_ts")); /* Parent thread ID */
+			const char *thread = json_string_value(json_object_get(json, "ts")); /* Thread ID */
+			/* Other fields:
+			 * blocks - rich formatting
+			 * client_msg_id
+			 * team
+			 * source_team
+			 * user_team
+			 * suppress_notification
+			 * event_ts - not really needed: https://api.slack.com/changelog/2016-05-31-more-events-timestamps-in-rtm-api
+			 */
+			res = cb->message(&event, channel, thread_ts, thread, user, text);
 		}
 	} else if (!strcmp(type, "pin_added")) {
 		
@@ -242,11 +270,31 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "presence_sub")) {
 		
 	} else if (!strcmp(type, "reaction_added")) {
-		
+		if (cb->reaction_added) {
+			const char *user = json_string_value(json_object_get(json, "user"));
+			const char *reaction = json_string_value(json_object_get(json, "reaction"));
+			const char *channel, *ts;
+			/* event_ts, ts not important
+			 * The top-level ts is for THIS event, not referring to the ts of the message with which the reaction is associated.
+			 * That is in "item": */
+			json_t *item = json_object_get(json, "item");
+			if (!item) {
+				slack_error("reaction_added event contains no item: %s\n", buf);
+				res = -1;
+				goto cleanup;
+			}
+			channel = json_string_value(json_object_get(item, "channel"));
+			ts = json_string_value(json_object_get(item, "ts"));
+			cb->reaction_added(&event, channel, ts, user, reaction);
+		}
 	} else if (!strcmp(type, "reaction_removed")) {
 		
 	} else if (!strcmp(type, "reconnect_url")) {
 		/* Experimental: does nothing? */
+		if (cb->reconnect_url) {
+			const char *url = json_string_value(json_object_get(json, "url"));
+			res = cb->reconnect_url(&event, url);
+		}
 	} else if (!strcmp(type, "shared_channel_invite_received")) {
 		
 	} else if (!strcmp(type, "star_added")) {
@@ -292,14 +340,29 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "user_typing")) {
 		if (cb->user_typing) {
 			const char *channel = json_string_value(json_object_get(json, "channel"));
+			const char *thread_ts = json_string_value(json_object_get(json, "thread_ts"));
 			const char *user = json_string_value(json_object_get(json, "user"));
 			int id = json_number_value(json_object_get(json, "id"));
-			res = cb->user_typing(&e, channel, id, user);
+			res = cb->user_typing(&event, channel, thread_ts, id, user);
 		}
-	/* These are all officially undocumented events: */
+	/* These are all officially undocumented events, that can be received via RTM: */
+	} else if (!strcmp(type, "apps_changed")) {
+	} else if (!strcmp(type, "app_actions_updated")) {
+	} else if (!strcmp(type, "apps_installed")) {
+	} else if (!strcmp(type, "apps_uninstalled")) {
+	} else if (!strcmp(type, "channel_converted_to_shared")) {
+	} else if (!strcmp(type, "clear_mention_notification")) {
+	} else if (!strcmp(type, "desktop_notification")) {
 	} else if (!strcmp(type, "draft_create")) {
 	} else if (!strcmp(type, "draft_delete")) {
+	} else if (!strcmp(type, "draft_send")) {
+	} else if (!strcmp(type, "draft_update")) {
 	} else if (!strcmp(type, "dnd_invalidated")) {
+	} else if (!strcmp(type, "thread_marked")) {
+	} else if (!strcmp(type, "thread_subscribed")) {
+	} else if (!strcmp(type, "update_global_thread_state")) {
+	} else if (!strcmp(type, "update_thread_state")) {
+	} else if (!strcmp(type, "user_interaction_changed")) {
 	} else if (!strcmp(type, "user_invalidated")) {
 	} else {
 		slack_warning("Unhandled event type: %s\n", type);
@@ -307,6 +370,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 		res = -1;
 	}
 
+cleanup:
 	json_decref(json);
 	return res;
 }
@@ -327,7 +391,7 @@ char *slack_construct_ping(int id)
 	return s;
 }
 
-char *slack_channel_construct_message(int id, const char *channel, const char *text)
+char *slack_channel_construct_message(int id, const char *channel, const char *thread_ts, const char *text)
 {
 	char *s;
 	json_t *json;
@@ -339,13 +403,16 @@ char *slack_channel_construct_message(int id, const char *channel, const char *t
 	json_object_set_new(json, "id", json_integer(id));
 	json_object_set_new(json, "type", json_string("message"));
 	json_object_set_new(json, "channel", json_string(channel));
+	if (thread_ts) {
+		json_object_set_new(json, "thread_ts", json_string(thread_ts));
+	}
 	json_object_set_new(json, "text", json_string(text));
 	s = json_dumps(json, 0);
 	json_decref(json);
 	return s;
 }
 
-char *slack_channel_construct_typing(int id, const char *channel)
+char *slack_channel_construct_typing(int id, const char *channel, const char *thread_ts)
 {
 	char *s;
 	json_t *json;
@@ -357,6 +424,9 @@ char *slack_channel_construct_typing(int id, const char *channel)
 	json_object_set_new(json, "id", json_integer(id));
 	json_object_set_new(json, "type", json_string("typing"));
 	json_object_set_new(json, "channel", json_string(channel));
+	if (thread_ts) {
+		json_object_set_new(json, "thread_ts", json_string(thread_ts));
+	}
 	s = json_dumps(json, 0);
 	json_decref(json);
 	return s;

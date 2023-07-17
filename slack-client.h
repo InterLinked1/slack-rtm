@@ -115,18 +115,20 @@ void slack_client_interrupt(struct slack_client *slack);
  * \brief Post a message to a channel.
  * \param slack
  * \param channel Channel ID (not name)
+ * \param thread_ts Parent thread ID (NULl if none)
  * \param text Message text. Should be under 4,000 characters and must be no greater than 16 KB.
  * \retval 0 on success, -1 on failure
  */
-int slack_channel_post_message(struct slack_client *slack, const char *channel, const char *text);
+int slack_channel_post_message(struct slack_client *slack, const char *channel, const char *thread_ts, const char *text);
 
 /*!
  * \brief Indicate typing to a channel.
  * \param slack
  * \param channel Channel ID (not name)
+ * \param thread_ts Thread ID (NULL if not in a thread)
  * \retval 0 on success, -1 on failure
  */
-int slack_channel_indicate_typing(struct slack_client *slack, const char *channel);
+int slack_channel_indicate_typing(struct slack_client *slack, const char *channel, const char *thread_ts);
 
 /*
  * \brief Whether a string represents a valid Slack channel ID

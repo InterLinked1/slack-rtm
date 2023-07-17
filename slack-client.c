@@ -645,14 +645,14 @@ static int slack_get_next_msgid(struct slack_client *slack)
 	return msgid;
 }
 
-int slack_channel_post_message(struct slack_client *slack, const char *channel, const char *text)
+int slack_channel_post_message(struct slack_client *slack, const char *channel, const char *thread_ts, const char *text)
 {
 	int msgid;
 	char *msg;
 	struct slack_reply *reply;
 
 	msgid = slack_get_next_msgid(slack);
-	msg = slack_channel_construct_message(msgid, channel, text);
+	msg = slack_channel_construct_message(msgid, channel, thread_ts, text);
 	if (!msg) {
 		return -1;
 	}
@@ -670,14 +670,14 @@ int slack_channel_post_message(struct slack_client *slack, const char *channel, 
 	return 0;
 }
 
-int slack_channel_indicate_typing(struct slack_client *slack, const char *channel)
+int slack_channel_indicate_typing(struct slack_client *slack, const char *channel, const char *thread_ts)
 {
 	int msgid;
 	char *msg;
 	struct slack_reply *reply;
 
 	msgid = slack_get_next_msgid(slack);
-	msg = slack_channel_construct_typing(msgid, channel);
+	msg = slack_channel_construct_typing(msgid, channel, thread_ts);
 	if (!msg) {
 		return -1;
 	}

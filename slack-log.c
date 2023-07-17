@@ -64,6 +64,7 @@ void __attribute__ ((format (printf, 5, 6))) slack_log(int level, const char *fi
 	free(buf);
 }
 
+#ifdef WEBSOCKET_DEBUG
 static void ws_log(int level, int len, const char *file, const char *function, int line, const char *buf)
 {
 	switch (level) {
@@ -78,6 +79,7 @@ static void ws_log(int level, int len, const char *file, const char *function, i
 			slack_log(level - SLACK_LOG_DEBUG + 5, file, function, line, "%.*s", len, buf);
 	}
 }
+#endif
 
 void slack_set_logger(void (*logger)(int level, int bytes, const char *file, const char *function, int line, const char *msg))
 {
@@ -86,11 +88,13 @@ void slack_set_logger(void (*logger)(int level, int bytes, const char *file, con
 
 void slack_set_log_level(int level)
 {
+#ifdef WEBSOCKET_DEBUG
 	/* In case the wss library is being used in a program that also uses it for something else,
 	 * don't use these callbacks unless we really have to */
-	if (level >= SLACK_LOG_DEBUG + 5) {
+	if (level) {
 		wss_set_logger(ws_log);
 		wss_set_log_level(WS_LOG_DEBUG + 5);
 	}
+#endif
 	loglevel = level;
 }

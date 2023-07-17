@@ -72,7 +72,6 @@ static void option_help(void)
 	fprintf(stderr, "SLACK_WS_URL       - Raw WebSocket request URI to send\n");
 	fprintf(stderr, "SLACK_COOKIE_D     - Contents of d cookie (URL encoded)\n");
 	fprintf(stderr, "SLACK_COOKIE_D_S   - Contents of d-s cookie\n");
-	fprintf(stderr, "SLACK_COOKIE_M     - Contents of m cookie\n");
 	fprintf(stderr, "SLACK_COOKIES      - Raw cookie header value to send\n");
 }
 

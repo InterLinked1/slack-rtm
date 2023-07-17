@@ -33,14 +33,14 @@
 
 #include "example-common.h"
 
-static int user_typing(struct slack_event *event, const char *channel, int id, const char *user)
+static int user_typing(struct slack_event *event, const char *channel, const char *thread, int id, const char *user)
 {
 	struct slack_client *slack = slack_event_get_userdata(event);
 
 	fprintf(stderr, "=== Someone is typing! %d: %s/%s\n", id, channel, user);
 
 	/* You're typing something? Me too! */
-	if (slack_channel_indicate_typing(slack, channel)) {
+	if (slack_channel_indicate_typing(slack, channel, thread)) {
 		fprintf(stderr, "=== Failed to indicate typing to channel %s\n", channel);
 	}
 

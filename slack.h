@@ -19,7 +19,7 @@
 
 #define SLACK_RTM_LIB_VERSION_MAJOR 0
 #define SLACK_RTM_LIB_VERSION_MINOR 3
-#define SLACK_RTM_LIB_VERSION_PATCH 0
+#define SLACK_RTM_LIB_VERSION_PATCH 1
 
 #define SLACK_LOG_NONE 0
 #define SLACK_LOG_FATAL 1
@@ -36,6 +36,14 @@ void slack_set_logger(void (*logger)(int level, int bytes, const char *file, con
  * \param level Maximum log level. For non-debug level, use the log level name. For a debug level, use SLACK_LOG_DEBUG + the max debug level.
  */
 void slack_set_log_level(int level);
+
+/*! \note
+ * This library consists of both higher level and lower level functions.
+ * They are mostly mutually exclusive in the sense that you should
+ * only need to use one or the other (but it's perfectly fine to use both, too).
+ * Use the high-level APIs in slack-client.h for a higher level interface,
+ * and use the low-level APIs in slack-rtm.h directly if you are managing the WebSocket connection yourself.
+ */
 
 /* Opaque event */
 struct slack_event;
@@ -58,6 +66,18 @@ const char *slack_event_get_raw(struct slack_event *event);
 /*! \brief Get the length of the raw message of an event */
 size_t slack_event_get_rawlen(struct slack_event *event);
 
+struct slack_event_channel_marked {
+	const char *channel;
+	const char *ts;				/*!< Thread */
+	int unread_count;
+	int unread_count_display;
+	int num_mentions;
+	int num_mentions_display;
+	int mention_count;
+	int mention_count_display;
+	const char *event_ts;
+};
+
 /*! \brief User callbacks for received events */
 struct slack_callbacks {
 	/* Command reply callback */
@@ -68,14 +88,9 @@ struct slack_callbacks {
 	 */
 	int (*all)(struct slack_event *event);
 	/* Event callbacks */
-	int (*message)(struct slack_event *event, const char *channel, const char *user, const char *text);
-	int (*user_typing)(struct slack_event *event, const char *channel, int id, const char *user);
+	int (*channel_marked)(struct slack_event *event, struct slack_event_channel_marked *channel_marked);
+	int (*message)(struct slack_event *event, const char *channel, const char *thread_ts, const char *thread, const char *user, const char *text);
+	int (*reaction_added)(struct slack_event *event, const char *channel, const char *ts, const char *user, const char *reaction);
+	int (*reconnect_url)(struct slack_event *event, const char *url);
+	int (*user_typing)(struct slack_event *event, const char *channel, const char *thread_ts, int id, const char *user);
 };
-
-/*! \note
- * This library consists of both higher level and lower level functions.
- * They are mostly mutually exclusive in the sense that you should
- * only need to use one or the other (but it's perfectly fine to use both, too).
- * Use the high-level APIs in slack-client.h for a higher level interface,
- * and use the low-level APIs in slack-rtm.h directly if you are managing the WebSocket connection yourself.
- */
