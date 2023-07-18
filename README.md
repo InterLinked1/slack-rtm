@@ -66,7 +66,7 @@ This library is split into both a "low level" API and a "high level" API as foll
 
 ## Building and Installing
 
-`libslackrtm` should be portable to most Linux platforms, and possibly Unix platforms as well.
+`libslackrtm` is primarily tested on Debian distros, but should be portable to most Linux platforms, and possibly Unix platforms as well.
 
 `libslackrtm` has the following dependencies, so make sure you have them:
 
@@ -83,6 +83,24 @@ Compiling `libslackrtm` itself is very easy:
 - Run `make install` to install the shared library on your system (which can then be linked to using `-lslackrtm`)
 
 - Run `make examples` to compile example programs, used to demonstrate library usage. These will produce standalone binaries in the `examples` directory that you can run.
+
+If you're doing all of this at once on a Debian system, you can run something along these lines:
+
+```
+sudo apt-get update
+sudo apt-get upgrade
+sudo apt-get install make gcc libssl-dev libjansson-dev
+git clone https://github.com/InterLinked1/libwss.git
+cd libwss/
+make
+sudo make install
+cd ..
+git clone https://github.com/InterLinked1/slack-rtm.git
+cd slack-rtm
+make
+sudo make install
+make examples
+```
 
 ## Running the Example Programs
 

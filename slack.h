@@ -89,7 +89,7 @@ struct slack_callbacks {
 	int (*all)(struct slack_event *event);
 	/* Event callbacks */
 	int (*channel_marked)(struct slack_event *event, struct slack_event_channel_marked *channel_marked);
-	int (*message)(struct slack_event *event, const char *channel, const char *thread_ts, const char *thread, const char *user, const char *text);
+	int (*message)(struct slack_event *event, const char *channel, const char *thread_ts, const char *ts, const char *user, const char *text);
 	int (*reaction_added)(struct slack_event *event, const char *channel, const char *ts, const char *user, const char *reaction);
 	int (*reconnect_url)(struct slack_event *event, const char *url);
 	int (*user_typing)(struct slack_event *event, const char *channel, const char *thread_ts, int id, const char *user);

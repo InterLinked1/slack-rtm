@@ -235,10 +235,12 @@ void slack_client_destroy(struct slack_client *slack)
 	pthread_mutex_destroy(&slack->wrlock);
 
 	/* Empty the queue */
-	reply = &slack->replyhead;
-		while ((reply = reply->next)) {
+	reply = (&slack->replyhead)->next;
+	while (reply) {
+		struct slack_reply *next = reply->next;
 		remque(reply);
 		slack_reply_free(reply);
+		reply = next;
 	}
 
 	free(slack);
