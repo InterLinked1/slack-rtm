@@ -79,9 +79,13 @@ struct slack_client {
 	pthread_mutex_t rdlock;	/*!< Mutex for reading */
 	pthread_mutex_t wrlock;	/*!< Mutex for writing */
 	struct slack_connect conn;
+	char *reconnect_url;
+	unsigned int autoreconnect:1;	/*!< Whether to autoreconnect */
+	unsigned int exiting:1;			/*!< Have we been told to exit? */
 	/* Current parsed message */
 	const char *raw;		/*!< Raw message */
 	json_t *json;			/*!< Parsed JSON */
+	pthread_t thread;		/*!< Event loop thread */
 };
 
 static char root_certs_default[84] = "/etc/ssl/certs/ca-certificates.crt";
@@ -199,9 +203,19 @@ struct slack_client *slack_client_new(void *userdata)
 	return slack;
 }
 
-void *slack_client_get_userdata(struct slack_client *client)
+void slack_client_set_autoreconnect(struct slack_client *slack, int enabled)
 {
-	return client->userdata;
+	/* Avoid errors trying to assign an int to a bit with certain compilation settings */
+	if (enabled) {
+		slack->autoreconnect = 1;
+	} else {
+		slack->autoreconnect = 0;
+	}
+}
+
+void *slack_client_get_userdata(struct slack_client *slack)
+{
+	return slack->userdata;
 }
 
 static void slack_reply_free(struct slack_reply *reply)
@@ -210,7 +224,12 @@ static void slack_reply_free(struct slack_reply *reply)
 	free(reply);
 }
 
-void slack_client_destroy(struct slack_client *slack)
+#define slack_rd_lock(slack) pthread_mutex_lock(&slack->rdlock)
+#define slack_rd_unlock(slack) pthread_mutex_unlock(&slack->rdlock)
+#define slack_wr_lock(slack) pthread_mutex_lock(&slack->wrlock)
+#define slack_wr_unlock(slack) pthread_mutex_unlock(&slack->wrlock)
+
+static void io_cleanup(struct slack_client *slack)
 {
 	struct slack_reply *reply;
 
@@ -226,15 +245,11 @@ void slack_client_destroy(struct slack_client *slack)
 		close(slack->fd);
 		slack->fd = -1;
 	}
-	if (slack->listenpipe[0] != -1) {
-		close(slack->listenpipe[0]);
-		close(slack->listenpipe[1]);
-		slack->listenpipe[0] = slack->listenpipe[1] = -1;
-	}
-	pthread_mutex_destroy(&slack->rdlock);
-	pthread_mutex_destroy(&slack->wrlock);
+
+	/* Not strictly required for I/O cleanup, but may as well since this should be cleared anyways if we're reconnecting */
 
 	/* Empty the queue */
+	slack_rd_lock(slack);
 	reply = (&slack->replyhead)->next;
 	while (reply) {
 		struct slack_reply *next = reply->next;
@@ -242,14 +257,27 @@ void slack_client_destroy(struct slack_client *slack)
 		slack_reply_free(reply);
 		reply = next;
 	}
-
-	free(slack);
+	slack_rd_unlock(slack);
 }
 
-#define slack_rd_lock(slack) pthread_mutex_lock(&slack->rdlock)
-#define slack_rd_unlock(slack) pthread_mutex_unlock(&slack->rdlock)
-#define slack_wr_lock(slack) pthread_mutex_lock(&slack->wrlock)
-#define slack_wr_unlock(slack) pthread_mutex_unlock(&slack->wrlock)
+void slack_client_destroy(struct slack_client *slack)
+{
+	io_cleanup(slack);
+
+	if (slack->listenpipe[0] != -1) {
+		close(slack->listenpipe[0]);
+		close(slack->listenpipe[1]);
+		slack->listenpipe[0] = slack->listenpipe[1] = -1;
+	}
+
+	if (slack->reconnect_url) {
+		free(slack->reconnect_url);
+	}
+
+	pthread_mutex_destroy(&slack->rdlock);
+	pthread_mutex_destroy(&slack->wrlock);
+	free(slack);
+}
 
 /*! \note Adapted from bbs_tcp_connect, LBBS (GPLv2), but relicensed here under LGPL */
 static int slack_connect(const char *hostname, int port)
@@ -588,11 +616,15 @@ int slack_client_connect(struct slack_client *slack)
 	return 0;
 }
 
+#define WAIT_FOR_REPLIES
+
 #ifdef WAIT_FOR_REPLIES
 #define slack_send_and_wait(client, msgid, msg) slack_send(client, msgid, msg, strlen(msg), 1)
 #else
 #define slack_send_and_wait(client, msgid, msg) slack_send(client, msgid, msg, strlen(msg), 0)
 #endif
+
+#define slack_send_nowait(client, msg) slack_send(client, 0, msg, strlen(msg), 0)
 
 /* Forward declaration */
 static struct slack_reply *slack_send(struct slack_client *client, int msgid, const char *msg, size_t len, int expect_response);
@@ -647,130 +679,88 @@ static int slack_get_next_msgid(struct slack_client *slack)
 	return msgid;
 }
 
+static int send_and_wait(struct slack_client *slack, int msgid, char *msg)
+{
+	struct slack_reply *reply;
+
+	reply = slack_send_and_wait(slack, msgid, msg);
+	free(msg);
+	if (reply) {
+		slack_reply_free(reply);
+	} else {
+#ifdef WAIT_FOR_REPLIES
+		slack_error("Failed to receive response to request %d\n", msgid);
+		return -1;
+#endif
+	}
+
+	return 0;
+}
+
 int slack_channel_post_message(struct slack_client *slack, const char *channel, const char *thread_ts, const char *text)
 {
 	int msgid;
 	char *msg;
-	struct slack_reply *reply;
 
 	msgid = slack_get_next_msgid(slack);
 	msg = slack_channel_construct_message(msgid, channel, thread_ts, text);
 	if (!msg) {
 		return -1;
 	}
-	reply = slack_send_and_wait(slack, msgid, msg);
-	free(msg);
-	if (reply) {
-		slack_reply_free(reply);
-	} else {
-#ifdef WAIT_FOR_REPLIES
-		slack_fatal("Failed to receive pong response\n");
-		return -1;
-#endif
-	}
-
-	return 0;
+	return send_and_wait(slack, msgid, msg);
 }
 
 int slack_channel_indicate_typing(struct slack_client *slack, const char *channel, const char *thread_ts)
 {
 	int msgid;
 	char *msg;
-	struct slack_reply *reply;
 
 	msgid = slack_get_next_msgid(slack);
 	msg = slack_channel_construct_typing(msgid, channel, thread_ts);
 	if (!msg) {
 		return -1;
 	}
-	reply = slack_send_and_wait(slack, msgid, msg);
-	free(msg);
-	if (reply) {
-		slack_reply_free(reply);
-	} else {
-#ifdef WAIT_FOR_REPLIES
-		slack_fatal("Failed to receive pong response\n");
-		return -1;
-#endif
-	}
-
-	return 0;
+	return send_and_wait(slack, msgid, msg);
 }
 
 static int slack_channel_ping(struct slack_client *slack)
 {
 	int msgid;
 	char *msg;
-	struct slack_reply *reply;
 
 	msgid = slack_get_next_msgid(slack);
 	msg = slack_construct_ping(msgid);
 	if (!msg) {
 		return -1;
 	}
-	reply = slack_send_and_wait(slack, msgid, msg);
-	free(msg);
-	if (reply) {
-		slack_reply_free(reply);
-	} else {
-#ifdef WAIT_FOR_REPLIES
-		slack_fatal("Failed to receive pong response\n");
+	return send_and_wait(slack, msgid, msg);
+}
+
+int slack_users_presence_query(struct slack_client *slack, json_t *userids)
+{
+	char *msg;
+
+	msg = slack_users_construct_presence_query(userids);
+	if (!msg) {
 		return -1;
-#endif
 	}
+	slack_send_nowait(slack, msg);
+	free(msg);
 	return 0;
 }
 
-#define SLACK_PING_INTERVAL 30000 /* Slack wants clients to ping them frequently */
-
-void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
+int slack_users_presence_subscribe(struct slack_client *slack, json_t *userids)
 {
-	struct pollfd pfd;
-	int res;
+	char *msg;
 
-	pfd.fd = slack->fd;
-	pfd.events = POLLIN;
-
-	slack->cb = cb;
-
-	for (;;) {
-		pfd.revents = 0;
-		res = poll(&pfd, 1, SLACK_PING_INTERVAL); 
-		if (res < 0) {
-			if (errno = EINTR) {
-				continue;
-			}
-			/* Possibly program exit (interrupt) */
-			slack_debug(1, "poll failed: %s\n", strerror(errno));
-			break;
-		}
-		if (pfd.revents) {
-			if (slack_read(slack, slack->cb)) {
-				break;
-			}
-		} else {
-			/* Send Slack a ping */
-			if (slack_channel_ping(slack)) {
-				break;
-			}
-		}
+	msg = slack_users_construct_presence_subscription(userids);
+	if (!msg) {
+		return -1;
 	}
+	slack_send_nowait(slack, msg);
+	free(msg);
+	return 0;
 }
-
-void slack_client_interrupt(struct slack_client *slack)
-{
-	int fd;
-	if (!slack) {
-		slack_error("No client provided to interrupt\n");
-		return;
-	}
-	fd = slack->fd;
-	slack->fd = -1;
-	shutdown(fd, SHUT_RDWR);
-	return;
-}
-
-#define WAIT_FOR_REPLIES
 
 static int on_reply(struct slack_event *event)
 {
@@ -797,11 +787,11 @@ static int on_reply(struct slack_event *event)
 	}
 
 	reply->json = json;
-	reply->replyto = json_number_value(json_object_get(json, "reply"));
+	reply->replyto = json_number_value(json_object_get(json, "reply_to"));
 
 	/* Insert into queue */
 	slack_rd_lock(slack);
-	insque(&slack->replyhead, reply);
+	insque(reply, &slack->replyhead);
 	slack_rd_unlock(slack);
 
 	/* Signal all listeners */
@@ -820,16 +810,101 @@ static int on_reply(struct slack_event *event)
 	return 0;
 }
 
+static int on_reconnect_url(struct slack_event *event, const char *url)
+{
+	struct slack_client *slack = slack_event_get_userdata(event);
+	if (slack->autoreconnect) {
+		if (slack->reconnect_url) {
+			free(slack->reconnect_url);
+		}
+		slack->reconnect_url = strdup(url);
+	}
+	return 0;
+}
+
+#define SLACK_PING_INTERVAL 30000 /* Slack wants clients to ping them frequently */
+
+void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
+{
+	struct pollfd pfd;
+	int res;
+	time_t lastconnect;
+
+	pfd.fd = slack->fd;
+	pfd.events = POLLIN;
+
+	slack->cb = cb;
+	slack->cb->reply = on_reply;
+	if (slack->autoreconnect) {
+		slack->cb->reconnect_url = on_reconnect_url;
+	}
+	slack->thread = pthread_self();
+
+	lastconnect = time(NULL);
+
+	for (;;) {
+		pfd.revents = 0;
+		res = poll(&pfd, 1, SLACK_PING_INTERVAL);
+		if (res < 0) {
+			if (errno = EINTR) {
+				continue;
+			}
+			/* Possibly program exit (interrupt) */
+			slack_debug(1, "poll failed: %s\n", strerror(errno));
+			break;
+		}
+		if (pfd.revents) {
+			if (slack_read(slack, slack->cb)) {
+				time_t now;
+				if (slack->exiting || !slack->autoreconnect || !slack->reconnect_url) {
+					break;
+				}
+				slack_client_set_connect_url(slack, slack->reconnect_url);
+				now = time(NULL);
+				if (lastconnect > now - 300) {
+					/* Prevent reconnecting too quickly if disconnected.
+					 * This is only for long lived periodic disconnects */
+					slack_warning("Unable to autoreconnect, too soon since last connect\n");
+					break;
+				}
+				slack_debug(1, "Disconnected prematurely, attempting reconnect...\n");
+				io_cleanup(slack);
+				if (slack_client_connect(slack)) {
+					slack_warning("Automatic reconnect failed\n");
+					break;
+				}
+				lastconnect = now;
+			}
+		} else {
+			/* Send Slack a ping */
+			if (slack_channel_ping(slack)) {
+				break;
+			}
+		}
+	}
+}
+
+void slack_client_interrupt(struct slack_client *slack)
+{
+	if (!slack) {
+		slack_error("No client provided to interrupt\n");
+		return;
+	}
+	slack->exiting = 1;
+	shutdown(slack->fd, SHUT_RDWR);
+	return;
+}
+
 static struct slack_reply *slack_send(struct slack_client *slack, int msgid, const char *msg, size_t len, int expect_response)
 {
 	int res;
-	struct pollfd pfd;
+	struct pollfd pfds[2];
+	time_t started = 0;
+	nfds_t numfds = 0;
 
-	if (!slack->cb) {
-		/* Even if user doesn't want any, we need to add our reply callback */
-		slack_fatal("No callbacks available\n");
-		return NULL;
-	}
+	/* slack->cb could be NULL, if the event loop hasn't been started yet.
+	 * This isn't an issue, we won't process any events until the event loop starts anyways.
+	 * Only at that point will we receive events and actually need the callbacks. */
 
 	if (!msg) {
 		/* Allocation failed prior to calling slack_write? */
@@ -848,7 +923,6 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 
 	/* wss_write is not multithread safe, we must surround it with our own lock */
 	slack_wr_lock(slack);
-	slack->cb->reply = on_reply;
 	slack->listeners++;
 	res = wss_write(slack->ws, WS_OPCODE_TEXT, msg, len);
 	slack_wr_unlock(slack);
@@ -863,42 +937,69 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 		return NULL;
 	}
 
+#define REPLY_TIMEOUT 10
+
 	/* This must be fully decoupled from reading frames, to avoid possibilities of deadlock. */
-	pfd.fd = slack->listenpipe[0];
-	pfd.events = POLLIN;
+	pfds[0].fd = slack->listenpipe[0];
+	pfds[0].events = POLLIN;
+	numfds = 1;
+
+	/* If this is a ping (called by event loop thread), we also need to read event as usual
+	 * in order to receive the reply. */
+	if (slack->thread == pthread_self()) {
+		numfds++;
+		pfds[1].fd = slack->fd;
+		pfds[1].events = POLLIN;
+	}
+
 	for (;;) {
 		struct slack_reply *reply;
 		char c;
 		int pres;
-		pfd.revents = 0;
+		if (!started) {
+			started = time(NULL);
+		} else {
+			time_t now = time(NULL);
+			if (now > started + REPLY_TIMEOUT) {
+				slack_warning("Failed to receive reply for message %d after %ld seconds\n", msgid, now - started);
+				return NULL;
+			}
+		}
 		slack_debug(8, "Still waiting for a response to %d...\n", msgid);
-		pres = poll(&pfd, 1, 10000); /* Wait up to 10 seconds for a reply */
+		pfds[0].revents = pfds[1].revents = 0;
+		pres = poll(pfds, numfds, REPLY_TIMEOUT * 1000); /* Wait up to 5 seconds for a reply */
 		if (pres <= 0) {
 			slack_warning("Failed to receive reply for message %d, poll returned %d: %s\n", msgid, pres, strerror(errno));
 			return NULL;
 		}
-		slack_rd_lock(slack);
-		/* Check the reply queue for our reply.
-		 * If it's for us, read from the listen pipe.
-		 * If not, don't, it's somebody else's. */
-		reply = &slack->replyhead;
-		while ((reply = reply->next)) {
-			if (reply->replyto == msgid) {
-				break;
+		if (pfds[0].revents) {
+			slack_rd_lock(slack);
+			/* Check the reply queue for our reply.
+			 * If it's for us, read from the listen pipe.
+			 * If not, don't, it's somebody else's. */
+			reply = &slack->replyhead;
+			while ((reply = reply->next)) {
+				if (reply->replyto == msgid) {
+					break;
+				}
 			}
+			if (!reply) {
+				slack_debug(7, "Didn't find reply to message %d yet...\n", msgid);
+				continue;
+			}
+			slack_wr_lock(slack);
+			remque(reply);
+			slack->listeners--;
+			slack_wr_unlock(slack);
+			pres = read(slack->listenpipe[0], &c, 1);
+			if (pres <= 0) {
+				slack_warning("Failed to read from pipe for message %d, read returned %d: %s\n", msgid, pres, strerror(errno));
+			}
+			slack_rd_unlock(slack);
+			slack_debug(7, "Successfully received reply to message %d\n", reply->replyto);
+			return reply;
+		} else if (pfds[1].revents) {
+			slack_read(slack, slack->cb);
 		}
-		if (!reply) {
-			continue;
-		}
-		slack_wr_lock(slack);
-		remque(reply);
-		slack->listeners--;
-		slack_wr_lock(slack);
-		pres = read(slack->listenpipe[0], &c, 1);
-		if (pres <= 0) {
-			slack_warning("Failed to read from pipe for message %d, read returned %d: %s\n", msgid, pres, strerror(errno));
-		}
-		slack_rd_unlock(slack);
-		return reply;
 	}
 }

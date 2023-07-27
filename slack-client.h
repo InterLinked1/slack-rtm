@@ -33,8 +33,16 @@ void slack_set_tls_root_certs(const char *rootcerts);
  */
 struct slack_client *slack_client_new(void *userdata);
 
+/*!
+ * \brief Set autoreconnect behavior for a Slack client (reconnect if disconnected)
+ * \param slack
+ * \param enabled Whether to autoreconnect or not. Default is no.
+ * \note This will automatically set up a callback for the reconnect_url event.
+ */
+void slack_client_set_autoreconnect(struct slack_client *slack, int enabled);
+
 /*! \brief Get the userdata provided in slack_client_new */
-void *slack_client_get_userdata(struct slack_client *client);
+void *slack_client_get_userdata(struct slack_client *slack);
 
 /*! \brief Clean up and free a Slack client created using slack_client_new */
 void slack_client_destroy(struct slack_client *slack);
@@ -129,6 +137,27 @@ int slack_channel_post_message(struct slack_client *slack, const char *channel, 
  * \retval 0 on success, -1 on failure
  */
 int slack_channel_indicate_typing(struct slack_client *slack, const char *channel, const char *thread_ts);
+
+/* This uses the jansson json_t, so only expose these if the application supports JSON */
+#ifdef SLACK_EXPOSE_JSON
+/*!
+ * \brief Query user presences
+ * \param slack
+ * \param userids A jansson json array containing user IDs, up to a maximum of 500 user IDs.
+ * \retval 0 on success, -1 on failure
+ * \note Actual presence values will be dispatched in a presence_change event.
+ */
+int slack_users_presence_query(struct slack_client *slack, json_t *userids);
+
+/*!
+ * \brief Subscribe to user presences
+ * \param slack
+ * \param userids A jansson json array containing user IDs, up to a maximum of 500 user IDs.
+ * \retval 0 on success, -1 on failure
+ * \note Actual presence values will be dispatched in a presence_change event.
+ */
+int slack_users_presence_subscribe(struct slack_client *slack, json_t *userids);
+#endif
 
 /*
  * \brief Whether a string represents a valid Slack channel ID

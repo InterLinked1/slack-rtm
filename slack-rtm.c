@@ -264,7 +264,26 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "pref_change")) {
 		
 	} else if (!strcmp(type, "presence_change")) {
-		
+		if (cb->presence_change) { /* https://api.slack.com/events/presence_change */
+			const char *presence = json_string_value(json_object_get(json, "presence"));
+			const char *user = json_string_value(json_object_get(json, "user"));
+			json_t *users = json_object_get(json, "users");
+			if (users) {
+				if (cb->presence_change_multi) { /* Native batched presence callback support */
+					res = cb->presence_change_multi(&event, users, presence);
+				} else {
+					size_t index;
+					json_t *value;
+					/* Only the single user callback is supported, so user that */
+					json_array_foreach(users, index, value) {
+						const char *userid = json_string_value(value);
+						res |= cb->presence_change(&event, userid, presence);
+					}
+				}
+			} else {
+				res = cb->presence_change(&event, user, presence);
+			}
+		}
 	} else if (!strcmp(type, "presence_query")) {
 		
 	} else if (!strcmp(type, "presence_sub")) {
@@ -430,4 +449,30 @@ char *slack_channel_construct_typing(int id, const char *channel, const char *th
 	s = json_dumps(json, 0);
 	json_decref(json);
 	return s;
+}
+
+static char *slack_users_construct_presence(json_t *userids, const char *type)
+{
+	char *s;
+	json_t *json;
+	json = json_object();
+	if (!json) {
+		slack_error("Failed to create JSON object\n");
+		return NULL;
+	}
+	json_object_set_new(json, "type", json_string(type));
+	json_object_set(json, "ids", userids); /* Do not steal the reference, the user passed it in and is responsible for it. */
+	s = json_dumps(json, 0);
+	json_decref(json);
+	return s;
+}
+
+char *slack_users_construct_presence_query(json_t *userids)
+{
+	return slack_users_construct_presence(userids, "presence_query");
+}
+
+char *slack_users_construct_presence_subscription(json_t *userids)
+{
+	return slack_users_construct_presence(userids, "presence_sub");
 }

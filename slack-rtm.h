@@ -31,7 +31,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 
 /*!
  * \brief Construct a ping message
- * \param id Unique ID for connection
+ * \param id Unique ID for operation on this connection
  * \return JSON payload to send on WebSocket on success
  * \return NULL on failure
  */
@@ -39,7 +39,7 @@ char *slack_construct_ping(int id);
 
 /*!
  * \brief Construct a message to send to a channel
- * \param id Unique ID for connection
+ * \param id Unique ID for operation on this connection
  * \param channel Channel ID (not name)
  * \param thread_ts Parent thread ID (NULL if none)
  * \param text
@@ -50,10 +50,26 @@ char *slack_channel_construct_message(int id, const char *channel, const char *t
 
 /*!
  * \brief Construct a typing indicator to send to a channel
- * \param id Unique ID for connection
+ * \param id Unique ID for operation on this connection
  * \param channel Channel ID (not name)
  * \param thread_ts Parent thread ID (NULL if none)
  * \return JSON payload to send on WebSocket on success
  * \return NULL on failure
 */
 char *slack_channel_construct_typing(int id, const char *channel, const char *thread_ts);
+
+/*!
+ * \brief Construct a presence query
+ * \param userids A jansson json array containing user IDs, up to a maximum of 500 user IDs.
+ * \return JSON payload to send on WebSocket on success
+ * \return NULL on failure
+ */
+char *slack_users_construct_presence_query(json_t *userids);
+
+/*!
+ * \brief Construct a presence subscription, to subscribe to future presence changes.
+ * \param userids A jansson json array containing user IDs. Slack recommends capping this at 500 user IDs.
+ * \return JSON payload to send on WebSocket on success
+ * \return NULL on failure
+ */
+char *slack_users_construct_presence_subscription(json_t *userids);
