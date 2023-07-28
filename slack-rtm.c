@@ -239,6 +239,18 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 		if (subtype) {
 			if (!strcmp(subtype, "message_replied")) {
 				/* text is NULL with this one */
+			} else if (!strcmp(subtype, "message_changed")) {
+				if (cb->message_changed) {
+					json_t *message = json_object_get(json, "message");
+					const char *channel = json_string_value(json_object_get(json, "channel"));
+					const char *user = json_string_value(json_object_get(message, "user"));
+					const char *text = json_string_value(json_object_get(message, "text"));
+					const char *thread_ts = json_string_value(json_object_get(message, "thread_ts")); /* Parent thread ID */
+					const char *thread = json_string_value(json_object_get(json, "ts")); /* Thread ID */
+					res = cb->message_changed(&event, channel, thread_ts, thread, user, text);
+				}
+			} else {
+				slack_debug(1, "Unhandled message subtype: %s\n", subtype);
 			}
 		} else if (cb->message) { /* Regular message callback */
 			const char *channel = json_string_value(json_object_get(json, "channel"));

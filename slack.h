@@ -19,7 +19,7 @@
 
 #define SLACK_RTM_LIB_VERSION_MAJOR 0
 #define SLACK_RTM_LIB_VERSION_MINOR 3
-#define SLACK_RTM_LIB_VERSION_PATCH 2
+#define SLACK_RTM_LIB_VERSION_PATCH 3
 
 #define SLACK_LOG_NONE 0
 #define SLACK_LOG_FATAL 1
@@ -90,6 +90,7 @@ struct slack_callbacks {
 	/* Event callbacks */
 	int (*channel_marked)(struct slack_event *event, struct slack_event_channel_marked *channel_marked);
 	int (*message)(struct slack_event *event, const char *channel, const char *thread_ts, const char *ts, const char *user, const char *text);
+	int (*message_changed)(struct slack_event *event, const char *channel, const char *thread_ts, const char *ts, const char *user, const char *text);
 	int (*presence_change)(struct slack_event *event, const char *user, const char *presence);
 #ifdef SLACK_EXPOSE_JSON
 	int (*presence_change_multi)(struct slack_event *event, json_t *userids, const char *presence);
