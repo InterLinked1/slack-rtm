@@ -19,7 +19,7 @@
 
 #define SLACK_RTM_LIB_VERSION_MAJOR 0
 #define SLACK_RTM_LIB_VERSION_MINOR 3
-#define SLACK_RTM_LIB_VERSION_PATCH 3
+#define SLACK_RTM_LIB_VERSION_PATCH 4
 
 #define SLACK_LOG_NONE 0
 #define SLACK_LOG_FATAL 1
@@ -94,6 +94,12 @@ struct slack_callbacks {
 	int (*presence_change)(struct slack_event *event, const char *user, const char *presence);
 #ifdef SLACK_EXPOSE_JSON
 	int (*presence_change_multi)(struct slack_event *event, json_t *userids, const char *presence);
+#else
+	/* Define a dummy callback if json_t type is not exposed to an application.
+	 * This ensures proper offsets for the struct; otherwise files without SLACK_EXPOSE_JSON
+	 * will use the wrong offset into the struct for any following callbacks.
+	 * This is fine, because in this case, this callback isn't being used. */
+	int (*presence_change_multi)(void);
 #endif
 	int (*reaction_added)(struct slack_event *event, const char *channel, const char *ts, const char *user, const char *reaction);
 	int (*reconnect_url)(struct slack_event *event, const char *url);

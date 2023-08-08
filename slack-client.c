@@ -160,7 +160,6 @@ static ssize_t ssl_write(void *data, const char *buf, size_t len)
 
 struct slack_client *slack_client_new(void *userdata)
 {
-	struct wss_client *ws;
 	struct slack_client *slack = calloc(1, sizeof(*slack));
 
 	slack->fd = -1;
@@ -171,20 +170,6 @@ struct slack_client *slack_client_new(void *userdata)
 		return NULL;
 	}
 
-	/* It's okay to pass in -1 for the file descriptor arguments,
-	 * since we are using our own I/O callbacks anyways. */
-	ws = wss_client_new(slack, -1, -1);
-	if (!ws) {
-		slack_fatal("Failed to create new WebSocket client\n");
-		close(slack->listenpipe[0]);
-		close(slack->listenpipe[1]);
-		slack->listenpipe[0] = slack->listenpipe[1] = -1;
-		return NULL;
-	}
-
-	wss_set_client_type(ws, WS_CLIENT); /* Client, not server */
-	wss_set_io_callbacks(ws, ssl_read, ssl_write);
-
 	if (!slack) {
 		slack_fatal("Failed to allocate Slack session\n");
 		close(slack->listenpipe[0]);
@@ -194,7 +179,6 @@ struct slack_client *slack_client_new(void *userdata)
 	}
 
 	slack->userdata = userdata;
-	slack->ws = ws;
 	slack->msgid = 1; /* Must be positive, so start here */
 
 	insque(&slack->replyhead, NULL);
@@ -596,6 +580,8 @@ int slack_client_connect_possible(struct slack_client *slack)
 
 int slack_client_connect(struct slack_client *slack)
 {
+	struct wss_client *ws;
+
 	if (!slack_client_connect_possible(slack)) {
 		return -1;
 	}
@@ -613,6 +599,19 @@ int slack_client_connect(struct slack_client *slack)
 	if (websocket_handshake(slack, &slack->conn)) {
 		return -1;
 	}
+
+	/* It's okay to pass in -1 for the file descriptor arguments,
+	 * since we are using our own I/O callbacks anyways. */
+	ws = wss_client_new(slack, -1, -1);
+	if (!ws) {
+		slack_fatal("Failed to create new WebSocket client\n");
+		return -1;
+	}
+
+	wss_set_client_type(ws, WS_CLIENT); /* Client, not server */
+	wss_set_io_callbacks(ws, ssl_read, ssl_write);
+	slack->ws = ws;
+
 	return 0;
 }
 
@@ -859,7 +858,8 @@ void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
 				if (slack->exiting || !slack->autoreconnect || !slack->reconnect_url) {
 					break;
 				}
-				slack_client_set_connect_url(slack, slack->reconnect_url);
+				/* Only want the URI portion, not the hostname */
+				slack_client_set_connect_url(slack, strchr(slack->reconnect_url, '/'));
 				now = time(NULL);
 				if (lastconnect > now - 300) {
 					/* Prevent reconnecting too quickly if disconnected.
