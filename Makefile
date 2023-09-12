@@ -36,7 +36,7 @@ examples:
 uninstall:
 	$(RM) /usr/lib/$(LIBNAME).so
 	$(RM) /usr/include/slackrtm/*.h
-	rm -rf /usr/lib/slackrtm
+	rm -rf /usr/include/slackrtm
 
 %.o : %.c
 	$(CC) $(CFLAGS) -c $^
