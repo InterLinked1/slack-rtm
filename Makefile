@@ -12,7 +12,6 @@ EXE		= slackrtm
 LIBNAME = libslackrtm
 RM		= rm -f
 INSTALL = install
-INSTALL = install
 
 MAIN_SRC := $(wildcard *.c)
 MAIN_OBJ = $(MAIN_SRC:.c=.o)

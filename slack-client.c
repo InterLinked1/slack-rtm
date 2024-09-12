@@ -848,7 +848,7 @@ void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
 			if (errno = EINTR) {
 				continue;
 			}
-			/* Possibly program exit (interrupt) */
+			/* Possible program exit (interrupt) */
 			slack_debug(1, "poll failed: %s\n", strerror(errno));
 			break;
 		}
@@ -900,6 +900,7 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 	int res;
 	struct pollfd pfds[2];
 	time_t started = 0;
+	int retries = 0;
 	nfds_t numfds = 0;
 
 	/* slack->cb could be NULL, if the event loop hasn't been started yet.
@@ -958,19 +959,29 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 		int pres;
 		if (!started) {
 			started = time(NULL);
+			slack_debug(8, "Waiting for a response to %d...\n", msgid);
 		} else {
 			time_t now = time(NULL);
 			if (now > started + REPLY_TIMEOUT) {
 				slack_warning("Failed to receive reply for message %d after %ld seconds\n", msgid, now - started);
 				return NULL;
 			}
+			slack_debug(5, "Still waiting for a response to %d...\n", msgid);
 		}
-		slack_debug(8, "Still waiting for a response to %d...\n", msgid);
 		pfds[0].revents = pfds[1].revents = 0;
 		pres = poll(pfds, numfds, REPLY_TIMEOUT * 1000); /* Wait up to 5 seconds for a reply */
 		if (pres <= 0) {
-			slack_warning("Failed to receive reply for message %d, poll returned %d: %s\n", msgid, pres, strerror(errno));
+			if (pres) {
+				slack_warning("Failed to receive reply for message %d, poll returned %d: %s\n", msgid, pres, strerror(errno));
+			} else {
+				slack_warning("Failed to receive reply for message %d, poll returned no activity in %d s\n", msgid, REPLY_TIMEOUT);
+			}
 			return NULL;
+		}
+		/* Check pending events first */
+		if (pfds[1].revents) {
+			slack_debug(7, "Activity pending from Slack\n");
+			slack_read(slack, slack->cb);
 		}
 		if (pfds[0].revents) {
 			slack_rd_lock(slack);
@@ -982,15 +993,30 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 				if (reply->replyto == msgid) {
 					break;
 				}
+				slack_debug(9, "Ignoring reply to message %d (want %d)\n", reply->replyto, msgid);
 			}
 			if (!reply) {
 				slack_debug(7, "Didn't find reply to message %d yet...\n", msgid);
+				slack_rd_unlock(slack);
+				/* Don't poll immediately again, or otherwise we'll just keep
+				 * seeing activity for the something else that we just ignored.
+				 * Also, use exponential backoff of some sort, since if we fail
+				 * the first few times, we'll probably fail the rest of them, too. */
+				if (retries++ < 2) {
+					usleep(50000);
+				} else if (retries < 4) {
+					usleep(500000);
+				} else {
+					usleep(1500000);
+				}
 				continue;
 			}
+
 			slack_wr_lock(slack);
 			remque(reply);
 			slack->listeners--;
 			slack_wr_unlock(slack);
+
 			pres = read(slack->listenpipe[0], &c, 1);
 			if (pres <= 0) {
 				slack_warning("Failed to read from pipe for message %d, read returned %d: %s\n", msgid, pres, strerror(errno));
@@ -998,8 +1024,6 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 			slack_rd_unlock(slack);
 			slack_debug(7, "Successfully received reply to message %d\n", reply->replyto);
 			return reply;
-		} else if (pfds[1].revents) {
-			slack_read(slack, slack->cb);
 		}
 	}
 }
