@@ -181,6 +181,9 @@ int slack_example_run(int argc, char *argv[], struct slack_callbacks *cb)
 		slack_client_set_cookie(slack, "d", cookie);
 	}
 
+	/* If we get disconnected for whatever reason, automatically try to reconnect. */
+	slack_client_set_autoreconnect(slack, 1);
+
 	if (!slack_client_connect_possible(slack)) {
 		fprintf(stderr, "Some required arguments are missing: either use environmental variables or command line arguments\n");
 		goto cleanup;
