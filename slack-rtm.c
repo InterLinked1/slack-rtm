@@ -64,7 +64,7 @@ size_t slack_event_get_rawlen(struct slack_event *event)
 
 int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, size_t len)
 {
-	json_t *json;
+	json_t *json, *okjson;
 	json_error_t error;
 	const char *type, *subtype;
 	int replyto;
@@ -92,9 +92,16 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 		return -1;
 	}
 
-	slack_debug(6, "<== %s\n", buf);
+	slack_debug(8, "<== %s\n", buf);
 
 	event.json = json;
+
+	okjson = json_object_get(json, "ok");
+	if (okjson) {
+		if (!json_boolean_value(okjson)) {
+			slack_warning("Failure: %s\n", buf);
+		}
+	}
 
 	/* Replies don't have a type */
 	replyto = json_number_value(json_object_get(json, "reply_to"));

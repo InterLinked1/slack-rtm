@@ -920,7 +920,7 @@ static struct slack_reply *slack_send(struct slack_client *slack, int msgid, con
 		return NULL;
 	}
 
-	slack_debug(6, "==> [%d] %.*s\n", msgid, (int) len, msg);
+	slack_debug(5, "==> [%d] %.*s\n", msgid, (int) len, msg);
 
 	/* wss_write is not multithread safe, we must surround it with our own lock */
 	slack_wr_lock(slack);
