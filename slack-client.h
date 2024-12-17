@@ -125,6 +125,8 @@ void slack_client_interrupt(struct slack_client *slack);
  * \param channel Channel ID (not name)
  * \param thread_ts Parent thread ID (NULl if none)
  * \param text Message text. Should be under 4,000 characters and must be no greater than 16 KB.
+ * \warning As of August 29, 2024, this may no longer work in enterprise workspaces and Slack does not care to address this issue.
+ *       Should continue to work normally in non-enterprise workspaces.
  * \retval 0 on success, -1 on failure
  */
 int slack_channel_post_message(struct slack_client *slack, const char *channel, const char *thread_ts, const char *text);

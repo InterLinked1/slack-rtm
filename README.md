@@ -121,6 +121,14 @@ Any testing should be done in a sandbox workspace. Otherwise, you may attract th
 
 This library itself is licensed under the GNU Lesser General Public License, but the example program code is all licensed under the Apache license, so feel free to use that as a starting point in your own programs.
 
+## Known Issues
+
+Posting messages to an enterprise workspace may fail when using the RTM API. This is a known defect with the RTM API itself, not this library, and one which Slack does not care to address, since the RTM API is deprecated and use of xoxc/xoxd tokens are not officially supported.
+
+As a workaround, you could use the [`chat.postMessage`](https://api.slack.com/methods/chat.postMessage) API, which is what the official Slack client uses. Since that is not using the RTM API, that is out-of-scope for this library.
+
+Non-enterprise workspaces are not affected and you should be able to post to them using the RTM API.
+
 ## Contributions, Issues, Bugs, etc.
 
 This library is still incomplete in the sense that not all events have callback functions and not all commands have functions yet. The most common types of things are implemented, but some of the lesser used stuff is not. Contributions to add missing functionality are welcome. Otherwise, if functionality you require is not currently available, feel free to open an issue.

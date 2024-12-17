@@ -43,6 +43,8 @@ char *slack_construct_ping(int id);
  * \param channel Channel ID (not name)
  * \param thread_ts Parent thread ID (NULL if none)
  * \param text
+ * \warning As of August 29, 2024, this may no longer work in enterprise workspaces and Slack does not care to address this issue.
+ *       Should continue to work normally in non-enterprise workspaces.
  * \return JSON payload to send on WebSocket on success
  * \return NULL on failure
  */
