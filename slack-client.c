@@ -861,7 +861,7 @@ void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
 				/* Only want the URI portion, not the hostname */
 				slack_client_set_connect_url(slack, strchr(slack->reconnect_url, '/'));
 				now = time(NULL);
-				if (lastconnect > now - 300) {
+				if (lastconnect > now - 15) {
 					/* Prevent reconnecting too quickly if disconnected.
 					 * This is only for long lived periodic disconnects */
 					slack_warning("Unable to autoreconnect, too soon since last connect\n");
