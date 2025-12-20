@@ -396,6 +396,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "draft_send")) {
 	} else if (!strcmp(type, "draft_update")) {
 	} else if (!strcmp(type, "dnd_invalidated")) {
+	} else if (!strcmp(type, "recent_status_changed")) {
 	} else if (!strcmp(type, "thread_marked")) {
 	} else if (!strcmp(type, "thread_subscribed")) {
 	} else if (!strcmp(type, "update_global_thread_state")) {
