@@ -129,25 +129,15 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	/* https://api.slack.com/rtm
 	 * https://api.slack.com/events */
 	} else if (!strcmp(type, "hello")) {
-		
 	} else if (!strcmp(type, "accounts_changed")) {
-		
 	} else if (!strcmp(type, "bot_added")) {
-		
 	} else if (!strcmp(type, "bot_changed")) {
-		
 	} else if (!strcmp(type, "channel_archive")) {
-		
 	} else if (!strcmp(type, "channel_created")) {
-		
 	} else if (!strcmp(type, "channel_deleted")) {
-		
 	} else if (!strcmp(type, "channel_history_changed")) {
-		
 	} else if (!strcmp(type, "channel_joined")) {
-		
 	} else if (!strcmp(type, "channel_left")) {
-		
 	} else if (!strcmp(type, "channel_marked")) {
 		if (cb->channel_marked) {
 			struct slack_event_channel_marked e;
@@ -163,85 +153,45 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 			res = cb->channel_marked(&event, &e);
 		}
 	} else if (!strcmp(type, "channel_rename")) {
-		
 	} else if (!strcmp(type, "channel_unarchive")) {
-		
 	} else if (!strcmp(type, "commands_changed")) {
-		
 	} else if (!strcmp(type, "dnd_updated")) {
-		
 	} else if (!strcmp(type, "dnd_updated_user")) {
-		
 	} else if (!strcmp(type, "email_domain_changed")) {
-		
 	} else if (!strcmp(type, "emoji_changed")) {
-		
 	} else if (!strcmp(type, "external_org_migration_finished")) {
-		
 	} else if (!strcmp(type, "external_org_migration_started")) {
-		
 	} else if (!strcmp(type, "file_change")) {
-		
 	} else if (!strcmp(type, "file_comment_added")) {
-		
 	} else if (!strcmp(type, "file_comment_deleted")) {
-		
 	} else if (!strcmp(type, "file_comment_edited")) {
-		
 	} else if (!strcmp(type, "file_created")) {
-		
 	} else if (!strcmp(type, "file_deleted")) {
-		
 	} else if (!strcmp(type, "file_public")) {
-		
 	} else if (!strcmp(type, "file_shared")) {
-		
 	} else if (!strcmp(type, "file_unshared")) {
-		
 	} else if (!strcmp(type, "goodbye")) {
-		
 	} else if (!strcmp(type, "group_archive")) {
-		
 	} else if (!strcmp(type, "group_close")) {
-		
 	} else if (!strcmp(type, "group_deleted")) {
-		
 	} else if (!strcmp(type, "group_history_changed")) {
-		
 	} else if (!strcmp(type, "group_joined")) {
-		
 	} else if (!strcmp(type, "group_left")) {
-		
 	} else if (!strcmp(type, "group_marked")) {
-		
 	} else if (!strcmp(type, "group_open")) {
-		
 	} else if (!strcmp(type, "group_rename")) {
-		
 	} else if (!strcmp(type, "group_unarchive")) {
-		
 	} else if (!strcmp(type, "hello")) {
-		
 	} else if (!strcmp(type, "im_close")) {
-		
 	} else if (!strcmp(type, "im_created")) {
-		
 	} else if (!strcmp(type, "im_history_changed")) {
-		
 	} else if (!strcmp(type, "im_marked")) {
-		
 	} else if (!strcmp(type, "im_open")) {
-		
 	} else if (!strcmp(type, "invite_requested")) {
-		
 	} else if (!strcmp(type, "link_shared")) {
-		
 	} else if (!strcmp(type, "manual_presence_change")) {
-		
 	} else if (!strcmp(type, "member_joined_channel")) {
-		
 	} else if (!strcmp(type, "member_left_channel")) {
-
 	} else if (!strcmp(type, "message")) {
 		if (subtype) {
 			if (!strcmp(subtype, "message_replied")) {
@@ -277,11 +227,8 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 			res = cb->message(&event, channel, thread_ts, thread, user, text);
 		}
 	} else if (!strcmp(type, "pin_added")) {
-		
 	} else if (!strcmp(type, "pin_removed")) {
-		
 	} else if (!strcmp(type, "pref_change")) {
-		
 	} else if (!strcmp(type, "presence_change")) {
 		if (cb->presence_change) { /* https://api.slack.com/events/presence_change */
 			const char *presence = json_string_value(json_object_get(json, "presence"));
@@ -304,9 +251,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 			}
 		}
 	} else if (!strcmp(type, "presence_query")) {
-		
 	} else if (!strcmp(type, "presence_sub")) {
-		
 	} else if (!strcmp(type, "reaction_added")) {
 		if (cb->reaction_added) {
 			const char *user = json_string_value(json_object_get(json, "user"));
@@ -326,7 +271,6 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 			cb->reaction_added(&event, channel, ts, user, reaction);
 		}
 	} else if (!strcmp(type, "reaction_removed")) {
-		
 	} else if (!strcmp(type, "reconnect_url")) {
 		/* Experimental: does nothing? */
 		if (cb->reconnect_url) {
@@ -334,47 +278,26 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 			res = cb->reconnect_url(&event, url);
 		}
 	} else if (!strcmp(type, "shared_channel_invite_received")) {
-		
 	} else if (!strcmp(type, "star_added")) {
-		
 	} else if (!strcmp(type, "star_removed")) {
-		
 	} else if (!strcmp(type, "subteam_created")) {
-		
 	} else if (!strcmp(type, "subteam_members_changed")) {
-		
 	} else if (!strcmp(type, "subteam_self_added")) {
-		
 	} else if (!strcmp(type, "subteam_self_removed")) {
-		
 	} else if (!strcmp(type, "subteam_updated")) {
-		
 	} else if (!strcmp(type, "team_domain_change")) {
-		
 	} else if (!strcmp(type, "team_join")) {
-		
 	} else if (!strcmp(type, "team_migration_started")) {
-		
 	} else if (!strcmp(type, "team_plan_change")) {
-		
 	} else if (!strcmp(type, "team_pref_change")) {
-		
 	} else if (!strcmp(type, "team_profile_change")) {
-		
 	} else if (!strcmp(type, "team_profile_delete")) {
-		
 	} else if (!strcmp(type, "team_profile_reorder")) {
-		
 	} else if (!strcmp(type, "team_rename")) {
-		
 	} else if (!strcmp(type, "user_change")) {
-		
 	} else if (!strcmp(type, "user_huddle_changed")) {
-		
 	} else if (!strcmp(type, "user_profile_changed")) {
-		
 	} else if (!strcmp(type, "user_status_changed")) {
-		
 	} else if (!strcmp(type, "user_typing")) {
 		if (cb->user_typing) {
 			const char *channel = json_string_value(json_object_get(json, "channel"));
@@ -388,7 +311,9 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "app_actions_updated")) {
 	} else if (!strcmp(type, "apps_installed")) {
 	} else if (!strcmp(type, "apps_uninstalled")) {
+	} else if (!strcmp(type, "badge_counts_updated")) {
 	} else if (!strcmp(type, "channel_converted_to_shared")) {
+	} else if (!strcmp(type, "channel_updated")) {
 	} else if (!strcmp(type, "clear_mention_notification")) {
 	} else if (!strcmp(type, "desktop_notification")) {
 	} else if (!strcmp(type, "draft_create")) {
