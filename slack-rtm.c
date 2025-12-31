@@ -307,6 +307,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 			res = cb->user_typing(&event, channel, thread_ts, id, user);
 		}
 	/* These are all officially undocumented events, that can be received via RTM: */
+	} else if (!strcmp(type, "activity")) {
 	} else if (!strcmp(type, "apps_changed")) {
 	} else if (!strcmp(type, "app_actions_updated")) {
 	} else if (!strcmp(type, "apps_installed")) {
