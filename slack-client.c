@@ -80,6 +80,7 @@ struct slack_client {
 	pthread_mutex_t wrlock;	/*!< Mutex for writing */
 	struct slack_connect conn;
 	char *reconnect_url;
+	time_t lastconnect;		/*!< Time of last connect */
 	unsigned int autoreconnect:1;	/*!< Whether to autoreconnect */
 	unsigned int exiting:1;			/*!< Have we been told to exit? */
 	/* Current parsed message */
@@ -305,12 +306,12 @@ static int slack_connect(const char *hostname, int port)
 		}
 		slack_debug(3, "Attempting connection to %s:%d\n", ip, port);
 		/* Put the socket in nonblocking mode to prevent connect from blocking for a long time.
-		 * Using SO_SNDTIMEO works on Linux and is easier than doing bbs_unblock_fd before and bbs_block_fd after. */
-		timeout.tv_sec = 4; /* Wait up to 4 seconds to connect */
+		 * Using SO_SNDTIMEO works on Linux and is easier than unblocking before and reblocking after. */
+		timeout.tv_sec = 10; /* Wait up to 10 seconds to connect */
 		timeout.tv_usec = 0;
 		setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 		if (connect(sfd, ai->ai_addr, ai->ai_addrlen)) {
-			slack_error("connect: %s\n", strerror(errno));
+			slack_debug(1, "connect(%s:%d): %s\n", ip, port, strerror(errno));
 			close(sfd);
 			sfd = -1;
 			continue;
@@ -320,6 +321,7 @@ static int slack_connect(const char *hostname, int port)
 
 	freeaddrinfo(res);
 	if (sfd == -1) {
+		slack_error("Unable to connect to %s (exhausted all records)\n", hostname);
 		return -1;
 	} else {
 		timeout.tv_sec = 0; /* Change back to fully blocking */
@@ -823,11 +825,35 @@ static int on_reconnect_url(struct slack_event *event, const char *url)
 
 #define SLACK_PING_INTERVAL 30000 /* Slack wants clients to ping them frequently */
 
+static int do_reconnect(struct slack_client *slack)
+{
+	time_t now;
+	if (!slack->autoreconnect || !slack->reconnect_url) {
+		return 1;
+	}
+	/* Only want the URI portion, not the hostname */
+	slack_client_set_connect_url(slack, strchr(slack->reconnect_url, '/'));
+	now = time(NULL);
+	if (slack->lastconnect > now - 15) {
+		/* Prevent reconnecting too quickly if disconnected.
+		 * This is only for long lived periodic disconnects */
+		slack_warning("Unable to autoreconnect, too soon since last connect\n");
+		return -1;
+	}
+	slack_debug(1, "Disconnected prematurely, attempting reconnect...\n");
+	io_cleanup(slack);
+	if (slack_client_connect(slack)) {
+		slack_warning("Automatic reconnect failed\n");
+		return -1;
+	}
+	slack->lastconnect = now;
+	return 0;
+}
+
 void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
 {
 	struct pollfd pfd;
 	int res;
-	time_t lastconnect;
 
 	pfd.fd = slack->fd;
 	pfd.events = POLLIN;
@@ -838,8 +864,7 @@ void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
 		slack->cb->reconnect_url = on_reconnect_url;
 	}
 	slack->thread = pthread_self();
-
-	lastconnect = time(NULL);
+	slack->lastconnect = time(NULL);
 
 	for (;;) {
 		pfd.revents = 0;
@@ -854,31 +879,24 @@ void slack_event_loop(struct slack_client *slack, struct slack_callbacks *cb)
 		}
 		if (pfd.revents) {
 			if (slack_read(slack, slack->cb)) {
-				time_t now;
-				if (slack->exiting || !slack->autoreconnect || !slack->reconnect_url) {
+				if (slack->exiting) {
 					break;
 				}
-				/* Only want the URI portion, not the hostname */
-				slack_client_set_connect_url(slack, strchr(slack->reconnect_url, '/'));
-				now = time(NULL);
-				if (lastconnect > now - 15) {
-					/* Prevent reconnecting too quickly if disconnected.
-					 * This is only for long lived periodic disconnects */
-					slack_warning("Unable to autoreconnect, too soon since last connect\n");
+				slack_debug(1, "Failed to read data from Slack, initiating reconnect\n");
+				if (do_reconnect(slack)) {
 					break;
 				}
-				slack_debug(1, "Disconnected prematurely, attempting reconnect...\n");
-				io_cleanup(slack);
-				if (slack_client_connect(slack)) {
-					slack_warning("Automatic reconnect failed\n");
-					break;
-				}
-				lastconnect = now;
 			}
 		} else {
 			/* Send Slack a ping */
 			if (slack_channel_ping(slack)) {
-				break;
+				if (slack->exiting) {
+					break;
+				}
+				slack_warning("Failed to send ping, initiating reconnect\n");
+				if (do_reconnect(slack) < 0) { /* If reconnect not enabled, then just keep going in this case */
+					break;
+				}
 			}
 		}
 	}
