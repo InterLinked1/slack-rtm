@@ -313,6 +313,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "apps_installed")) {
 	} else if (!strcmp(type, "apps_uninstalled")) {
 	} else if (!strcmp(type, "badge_counts_updated")) {
+	} else if (!strcmp(type, "channel_contextbar")) {
 	} else if (!strcmp(type, "channel_converted_to_shared")) {
 	} else if (!strcmp(type, "channel_updated")) {
 	} else if (!strcmp(type, "clear_mention_notification")) {
@@ -322,6 +323,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "draft_send")) {
 	} else if (!strcmp(type, "draft_update")) {
 	} else if (!strcmp(type, "dnd_invalidated")) {
+	} else if (!strcmp(type, "file_view_ready")) {
 	} else if (!strcmp(type, "recent_status_changed")) {
 	} else if (!strcmp(type, "thread_marked")) {
 	} else if (!strcmp(type, "thread_subscribed")) {
