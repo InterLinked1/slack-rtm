@@ -318,6 +318,7 @@ int slack_parse_message(struct slack_callbacks *cb, void *userdata, char *buf, s
 	} else if (!strcmp(type, "channel_updated")) {
 	} else if (!strcmp(type, "clear_mention_notification")) {
 	} else if (!strcmp(type, "desktop_notification")) {
+	} else if (!strcmp(type, "desync")) {
 	} else if (!strcmp(type, "draft_create")) {
 	} else if (!strcmp(type, "draft_delete")) {
 	} else if (!strcmp(type, "draft_send")) {
